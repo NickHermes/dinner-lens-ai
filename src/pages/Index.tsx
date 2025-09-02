@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { FloatingActionButton } from "@/components/FloatingActionButton";
 import { DinnerCard } from "@/components/DinnerCard";
+import { BottomNavigation } from "@/components/BottomNavigation";
 import heroImage from "@/assets/hero-dinner.jpg";
 
 // Mock data for demonstration
@@ -130,22 +131,7 @@ const Index = () => {
       </section>
 
       {/* Navigation Tabs */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-card/90 backdrop-blur-sm border-t border-border">
-        <div className="flex justify-around py-3">
-          <Button variant="ghost" size="sm" className="flex-col gap-1">
-            <Camera className="h-5 w-5" />
-            <span className="text-xs">Gallery</span>
-          </Button>
-          <Button variant="ghost" size="sm" className="flex-col gap-1">
-            <MapPin className="h-5 w-5" />
-            <span className="text-xs">Places</span>
-          </Button>
-          <Button variant="ghost" size="sm" className="flex-col gap-1">
-            <TrendingUp className="h-5 w-5" />
-            <span className="text-xs">Insights</span>
-          </Button>
-        </div>
-      </nav>
+      <BottomNavigation />
 
       {/* Floating Action Button */}
       <FloatingActionButton />
