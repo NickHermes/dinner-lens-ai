@@ -19,7 +19,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
+        <BrowserRouter basename={import.meta.env.PROD ? '/dinner-lens-ai' : '/'}>
           <AuthGate>
             <Routes>
               <Route path="/" element={<Index />} />
