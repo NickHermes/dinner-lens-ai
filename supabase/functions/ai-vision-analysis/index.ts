@@ -8,26 +8,18 @@ const corsHeaders = {
 
 interface AnalysisRequest {
   imageUrl: string
-  dinnerId: string
+  userId: string
 }
 
 interface AITag {
   name: string
   type: 'ingredient' | 'cuisine' | 'dish' | 'diet' | 'method' | 'course'
-  confidence: number
 }
 
 interface AnalysisResponse {
-  title: string
-  caption: string
-  tags: AITag[]
-  nutrition: {
-    calories?: number
-    protein_g?: number
-    carbs_g?: number
-    fat_g?: number
-    fiber_g?: number
-  }
+  suggested_title: string
+  suggested_caption: string
+  suggested_tags: AITag[]
   health_score: number
 }
 
@@ -37,7 +29,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageUrl, dinnerId }: AnalysisRequest = await req.json()
+    const { imageUrl, userId }: AnalysisRequest = await req.json()
     
     // Get OpenAI API key from Supabase secrets
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
@@ -53,21 +45,33 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4-vision-preview',
+        model: 'gpt-4o',
         messages: [
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: `Analyze this dinner photo and return a JSON response with:
-                1. title: Short dish name (e.g., "Salmon Teriyaki Bowl")
-                2. caption: One-line description
-                3. tags: Array of objects with name, type (ingredient/cuisine/dish/diet/method/course), and confidence (0-1)
-                4. nutrition: Estimated calories, protein_g, carbs_g, fat_g, fiber_g
-                5. health_score: 0-100 based on nutritional value
+                text: `Analyze this dinner photo and return ONLY a valid JSON object with this exact structure:
+                {
+                  "suggested_title": "Short dish name",
+                  "suggested_caption": "One-line description",
+                  "suggested_tags": [
+                    {"name": "main ingredient", "type": "ingredient"},
+                    {"name": "cuisine type", "type": "cuisine"},
+                    {"name": "dish type", "type": "dish"}
+                  ],
+                  "health_score": 75
+                }
 
-                Focus on visible ingredients and clear dietary indicators. Only include diet tags if obviously vegetarian/vegan/pescetarian.`
+                Provide 2-8 tags focusing on:
+                - Main visible ingredients (rice, chicken, vegetables, etc.)
+                - Cuisine type (Italian, Japanese, Mexican, etc.) 
+                - Dish type (burger, pasta, salad, etc.)
+                - Only include diet tags if obviously vegetarian/vegan/pescetarian
+                
+                For health_score, rate from 0-100 based on: vegetables (+10), whole grains (+6), fish (+6), deep-fried (-10), red meat (-8), sugary desserts (-8).
+                Return ONLY the JSON, no other text.`
               },
               {
                 type: 'image_url',
@@ -82,86 +86,52 @@ serve(async (req) => {
     })
 
     const visionResult = await visionResponse.json()
-    const analysisText = visionResult.choices[0]?.message?.content
+    
+    if (!visionResponse.ok) {
+      throw new Error(`OpenAI API error: ${visionResponse.status} - ${JSON.stringify(visionResult)}`)
+    }
+    
+    const analysisText = visionResult.choices?.[0]?.message?.content
 
     if (!analysisText) {
+      console.error('Vision result:', visionResult)
       throw new Error('No analysis returned from AI')
     }
 
     // Parse AI response
     let analysis: AnalysisResponse
     try {
-      analysis = JSON.parse(analysisText)
-    } catch {
+      // Try to extract JSON from the response if it's wrapped in markdown
+      let jsonText = analysisText
+      if (analysisText.includes('```json')) {
+        const jsonMatch = analysisText.match(/```json\n([\s\S]*?)\n```/)
+        if (jsonMatch) {
+          jsonText = jsonMatch[1]
+        }
+      }
+      
+      analysis = JSON.parse(jsonText)
+      
+      // Validate the response structure
+      if (!analysis.suggested_title) analysis.suggested_title = 'Delicious Dinner'
+      if (!analysis.suggested_caption) analysis.suggested_caption = 'A tasty meal captured'
+      if (!analysis.suggested_tags) analysis.suggested_tags = []
+      if (!analysis.health_score) analysis.health_score = 50
+      
+    } catch (parseError) {
+      console.error('JSON Parse Error:', parseError)
+      console.error('Raw AI Response:', analysisText)
+      
       // Fallback parsing if JSON is malformed
       analysis = {
-        title: 'Delicious Dinner',
-        caption: 'A tasty meal captured',
-        tags: [],
-        nutrition: {},
+        suggested_title: 'Delicious Dinner',
+        suggested_caption: 'A tasty meal captured',
+        suggested_tags: [],
         health_score: 50
       }
     }
 
-    // Create Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-    // Update dinner with AI analysis
-    await supabase
-      .from('dinners')
-      .update({
-        title: analysis.title,
-        ai_caption: analysis.caption,
-        nutrition_calories: analysis.nutrition.calories,
-        nutrition_protein_g: analysis.nutrition.protein_g,
-        nutrition_carbs_g: analysis.nutrition.carbs_g,
-        nutrition_fat_g: analysis.nutrition.fat_g,
-        nutrition_fiber_g: analysis.nutrition.fiber_g,
-        health_score: analysis.health_score
-      })
-      .eq('id', dinnerId)
-
-    // Insert AI-generated tags
-    const tagInserts = analysis.tags
-      .filter(tag => tag.confidence > 0.5) // Only high-confidence tags
-      .map(tag => ({
-        dinner_id: dinnerId,
-        name: tag.name,
-        type: tag.type,
-        source: 'ai' as const,
-        approved: false,
-        confidence: tag.confidence
-      }))
-
-    if (tagInserts.length > 0) {
-      await supabase.from('tags').insert(tagInserts)
-    }
-
-    // Generate embedding for semantic search
-    const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-ada-002',
-        input: `${analysis.title} ${analysis.caption} ${analysis.tags.map(t => t.name).join(' ')}`
-      })
-    })
-
-    const embeddingResult = await embeddingResponse.json()
-    const embedding = embeddingResult.data[0]?.embedding
-
-    if (embedding) {
-      await supabase.from('embeddings').insert({
-        dinner_id: dinnerId,
-        content: `${analysis.title} ${analysis.caption}`,
-        embedding: embedding
-      })
-    }
+    // Just return the analysis for now - the client will handle saving
 
     return new Response(JSON.stringify(analysis), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
