@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { FloatingActionButton } from "@/components/FloatingActionButton";
 import { DinnerCard } from "@/components/DinnerCard";
 import { BottomNavigation } from "@/components/BottomNavigation";
+import { AISearch } from "@/components/AISearch";
 import heroImage from "@/assets/hero-dinner.jpg";
 
 // Mock data for demonstration
@@ -110,10 +111,7 @@ const Index = () => {
           </div>
           
           <div className="mt-4">
-            <Input 
-              placeholder="Ask: spicy noodles I ate with salmon last winter..." 
-              className="w-full"
-            />
+            <AISearch />
           </div>
         </div>
       </section>
