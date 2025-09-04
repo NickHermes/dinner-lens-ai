@@ -1,5 +1,6 @@
 name: Deploy to GitHub Pages
 
+# Trigger deployment on push to main or develop branches
 on:
   push:
     branches: [ main, develop ]
