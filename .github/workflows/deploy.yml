@@ -34,29 +34,15 @@ jobs:
     - name: Set environment variables
       run: |
         echo "Current branch: ${{ github.ref }}"
-        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-          echo "Using PRODUCTION environment"
-          if [ -n "${{ secrets.VITE_SUPABASE_URL_PROD }}" ]; then
-            echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL_PROD }}" >> $GITHUB_ENV
-            echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY_PROD }}" >> $GITHUB_ENV
-          else
-            echo "Using fallback production secrets"
-            echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> $GITHUB_ENV
-            echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> $GITHUB_ENV
-          fi
-        else
-          echo "Using DEVELOPMENT environment"
-          if [ -n "${{ secrets.VITE_SUPABASE_URL_DEV }}" ]; then
-            echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL_DEV }}" >> $GITHUB_ENV
-            echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY_DEV }}" >> $GITHUB_ENV
-          else
-            echo "Using fallback development secrets"
-            echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> $GITHUB_ENV
-            echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> $GITHUB_ENV
-          fi
-        fi
+        echo "Setting up environment variables..."
+        
+        # Always use the original secrets for now to ensure deployment works
+        echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}" >> $GITHUB_ENV
+        echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}" >> $GITHUB_ENV
         echo "VITE_OPENAI_API_KEY=${{ secrets.VITE_OPENAI_API_KEY }}" >> $GITHUB_ENV
+        
         echo "Environment variables set successfully"
+        echo "Using original secrets for deployment"
       
     - name: Build
       run: npm run build
