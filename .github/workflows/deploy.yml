@@ -1,8 +1,14 @@
 name: Deploy to GitHub Pages
 
+# Trigger deployment on push to main branch only
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -12,6 +18,9 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     
     steps:
     - name: Checkout
@@ -26,12 +35,30 @@ jobs:
     - name: Install dependencies
       run: npm ci
       
+    - name: Set environment variables
+      run: |
+        if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+          echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL_DEV }}" >> $GITHUB_ENV
+          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY_DEV }}" >> $GITHUB_ENV
+        else
+          echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL_PROD }}" >> $GITHUB_ENV
+          echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY_PROD }}" >> $GITHUB_ENV
+        fi
+        echo "VITE_OPENAI_API_KEY=${{ secrets.VITE_OPENAI_API_KEY }}" >> $GITHUB_ENV
+        
+    - name: Debug environment variables
+      run: |
+        echo "Branch: ${{ github.ref }}"
+        echo "VITE_SUPABASE_URL exists: ${{ env.VITE_SUPABASE_URL != '' }}"
+        echo "VITE_SUPABASE_ANON_KEY exists: ${{ env.VITE_SUPABASE_ANON_KEY != '' }}"
+        echo "VITE_OPENAI_API_KEY exists: ${{ env.VITE_OPENAI_API_KEY != '' }}"
+        
     - name: Build
       run: npm run build
       env:
-        VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-        VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-        VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
+        VITE_SUPABASE_URL: ${{ env.VITE_SUPABASE_URL }}
+        VITE_SUPABASE_ANON_KEY: ${{ env.VITE_SUPABASE_ANON_KEY }}
+        VITE_OPENAI_API_KEY: ${{ env.VITE_OPENAI_API_KEY }}
       
     - name: Create 404.html for SPA routing
       run: cp dist/index.html dist/404.html
