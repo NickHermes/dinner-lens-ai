@@ -3,35 +3,21 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-console.log('🔧 Supabase config:', {
-  url: supabaseUrl,
-  keyExists: !!supabaseAnonKey,
-  keyLength: supabaseAnonKey?.length,
-  isDevBuild: import.meta.env.VITE_IS_DEV_BUILD,
-  branch: import.meta.env.VITE_BRANCH,
-  mode: import.meta.env.MODE,
-  base: import.meta.env.BASE_URL,
-  allEnv: Object.keys(import.meta.env).filter(key => key.startsWith('VITE_'))
-})
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Missing Supabase environment variables:', {
+// Minimal diagnostics in development only
+if (import.meta.env.DEV) {
+  console.log('🔧 Supabase config (dev):', {
     url: supabaseUrl,
-    key: supabaseAnonKey,
-    isDevBuild: import.meta.env.VITE_IS_DEV_BUILD
+    keyExists: !!supabaseAnonKey,
+    keyLength: supabaseAnonKey?.length,
   })
-  throw new Error(`Missing Supabase environment variables: URL=${supabaseUrl}, Key=${!!supabaseAnonKey}`)
 }
 
-// Test URL validity
-try {
-  new URL(supabaseUrl)
-} catch (error) {
-  console.error('❌ Invalid Supabase URL:', supabaseUrl, error)
-  throw new Error(`Invalid Supabase URL: ${supabaseUrl}`)
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables')
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
 
 // Database types
 export interface Dinner {

@@ -775,7 +775,12 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(open) => {
+      if (!open) {
+        resetForm()
+      }
+      onOpenChange(open)
+    }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -1098,7 +1103,10 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
               )}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
+              <Button variant="outline" onClick={() => {
+                resetForm()
+                onOpenChange(false)
+              }}>
                 Cancel
           </Button>
               <Button 
