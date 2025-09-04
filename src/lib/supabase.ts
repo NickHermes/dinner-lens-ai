@@ -8,7 +8,8 @@ console.log('🔧 Supabase config:', {
   keyExists: !!supabaseAnonKey,
   keyLength: supabaseAnonKey?.length,
   isDevBuild: import.meta.env.VITE_IS_DEV_BUILD,
-  allEnvVars: import.meta.env
+  branch: import.meta.env.VITE_BRANCH,
+  mode: import.meta.env.MODE
 })
 
 if (!supabaseUrl || !supabaseAnonKey) {
@@ -18,6 +19,14 @@ if (!supabaseUrl || !supabaseAnonKey) {
     isDevBuild: import.meta.env.VITE_IS_DEV_BUILD
   })
   throw new Error(`Missing Supabase environment variables: URL=${supabaseUrl}, Key=${!!supabaseAnonKey}`)
+}
+
+// Test URL validity
+try {
+  new URL(supabaseUrl)
+} catch (error) {
+  console.error('❌ Invalid Supabase URL:', supabaseUrl, error)
+  throw new Error(`Invalid Supabase URL: ${supabaseUrl}`)
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)

@@ -37,6 +37,7 @@ jobs:
       
     - name: Set environment variables
       run: |
+        echo "VITE_BRANCH=${{ github.ref_name }}" >> $GITHUB_ENV
         if [ "${{ github.ref }}" = "refs/heads/develop" ]; then
           echo "VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL_DEV }}" >> $GITHUB_ENV
           echo "VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY_DEV }}" >> $GITHUB_ENV
@@ -63,6 +64,7 @@ jobs:
         VITE_SUPABASE_ANON_KEY: ${{ env.VITE_SUPABASE_ANON_KEY }}
         VITE_OPENAI_API_KEY: ${{ env.VITE_OPENAI_API_KEY }}
         VITE_IS_DEV_BUILD: ${{ env.VITE_IS_DEV_BUILD }}
+        VITE_BRANCH: ${{ env.VITE_BRANCH }}
       
     - name: Create 404.html for SPA routing
       run: cp dist/index.html dist/404.html
