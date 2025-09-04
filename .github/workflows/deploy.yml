@@ -1,9 +1,9 @@
 name: Deploy to GitHub Pages
 
-# Trigger deployment on push to main or develop branches
+# Trigger deployment on push to main branch only
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
 concurrency:
