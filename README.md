@@ -1,6 +1,6 @@
 # Welcome to your Lovable project
 
-<!-- Trigger deployment - fix base path issue -->
+<!-- Trigger deployment - test fixed Supabase secrets -->
 
 ## Project info
 
