@@ -1,6 +1,6 @@
 # Welcome to your Lovable project
 
-<!-- Trigger deployment -->
+<!-- Trigger deployment - fix base path issue -->
 
 ## Project info
 
