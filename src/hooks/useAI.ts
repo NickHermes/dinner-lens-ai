@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast } from '@/components/ui/use-toast'
+import { extractExifData } from '@/lib/exif'
 
 export interface AITag {
   name: string
@@ -60,12 +61,24 @@ export const useAI = () => {
 
       if (error) throw error
 
-      // Store photo record
+      // Extract EXIF data from the uploaded file
+      let exifData = { width: 0, height: 0 }
+      try {
+        exifData = await extractExifData(imageFile)
+        console.log('Extracted EXIF data in useAI:', exifData)
+      } catch (error) {
+        console.warn('Failed to extract EXIF data in useAI:', error)
+      }
+
+      // Store photo record with EXIF data
       await supabase.from('photos').insert({
         dinner_id: dinnerId,
         url: imageUrl,
-        width: null,
-        height: null
+        width: exifData.width || 0,
+        height: exifData.height || 0,
+        exif_lat: exifData.latitude || null,
+        exif_lon: exifData.longitude || null,
+        exif_time: exifData.timestamp || null
       })
 
       toast({

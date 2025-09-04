@@ -24,7 +24,8 @@ interface Dinner {
     type: string
   }
   notes?: string
-
+  deliciousness?: number
+  effort?: 'easy' | 'medium' | 'hard'
   health_score?: number
   photos: { url: string }[]
   tags: { name: string; type: string; source: string; approved: boolean }[]
@@ -210,38 +211,71 @@ export const DinnerDetail: React.FC<DinnerDetailProps> = ({
             </div>
           )}
 
-          {/* Health Score */}
-          {dinner.health_score !== null && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  Health Score
-                  <Badge 
-                    className={`text-xs ${getHealthScoreBadgeClass(dinner.health_score)}`}
-                  >
-                    {dinner.health_score}/100
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+          {/* Yummy Factor and Effort Level */}
+          {(dinner.deliciousness || dinner.effort) && (
+            <div className="space-y-4">
+              {dinner.deliciousness && (
                 <div className="space-y-2">
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className={`h-2 rounded-full ${
-                        dinner.health_score >= 70 ? 'bg-green-500' : 
-                        dinner.health_score >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                      }`}
-                      style={{ width: `${dinner.health_score}%` }}
-                    ></div>
-                  </div>
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Unhealthy</span>
-                    <span>Moderate</span>
-                    <span>Healthy</span>
+                  <Label>How Yummy?</Label>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <span
+                          key={star}
+                          className={`text-lg ${star <= dinner.deliciousness! ? 'text-yellow-400' : 'text-gray-300'}`}
+                        >
+                          ★
+                        </span>
+                      ))}
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {dinner.deliciousness}/5 stars
+                    </span>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              )}
+              
+              {dinner.effort && (
+                <div className="space-y-2">
+                  <Label>Effort Level</Label>
+                  <div className="flex items-center gap-3">
+                    <Badge 
+                      variant="outline" 
+                      className={`${
+                        dinner.effort === 'easy' ? 'bg-green-100 text-green-800 border-green-200' :
+                        dinner.effort === 'medium' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                        'bg-red-100 text-red-800 border-red-200'
+                      }`}
+                    >
+                      {dinner.effort.charAt(0).toUpperCase() + dinner.effort.slice(1)}
+                    </Badge>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Health Score */}
+          {dinner.health_score !== null && (
+            <div className="space-y-2">
+              <Label>Health Score</Label>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <Badge 
+                  className={`text-xs w-fit ${getHealthScoreBadgeClass(dinner.health_score)}`}
+                >
+                  {dinner.health_score}/100
+                </Badge>
+                <div className="flex-1 bg-gray-200 rounded-full h-1 min-w-0">
+                  <div 
+                    className={`h-1 rounded-full ${
+                      dinner.health_score >= 70 ? 'bg-green-500' : 
+                      dinner.health_score >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                    }`}
+                    style={{ width: `${dinner.health_score}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Notes */}

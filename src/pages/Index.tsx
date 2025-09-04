@@ -89,7 +89,7 @@ const Index = () => {
       const { data, error } = await supabase
         .from('dinners')
         .select(`
-          id, title, datetime, notes, favorite, health_score,
+          id, title, datetime, notes, favorite, health_score, deliciousness, effort,
           places(name, type),
           photos(url),
           tags(name, type, approved)
@@ -270,7 +270,7 @@ const Index = () => {
       </section>
 
       {/* Gallery */}
-      <section className="px-4 pb-20">
+      <section className="px-4 pb-24">
         <div className="container mx-auto">
           <h3 className="text-xl font-semibold mb-4 text-foreground">Recent Dinners</h3>
           {isLoading ? (

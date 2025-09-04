@@ -86,7 +86,7 @@ Return JSON with these fields (only include relevant ones):
     let dinnerQuery = supabase
       .from('dinners')
       .select(`
-        id, title, datetime, notes, ai_caption, favorite, health_score,
+        id, title, datetime, notes, ai_caption, favorite, health_score, deliciousness, effort,
         places(name, type),
         photos(url),
         tags(name, type, approved)
