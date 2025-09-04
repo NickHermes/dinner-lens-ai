@@ -146,6 +146,7 @@ interface AddDinnerProps {
   datetime: string
   place_id?: string
   notes: string
+  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'other'
   health_score?: number
   photos: { url: string }[]
   tags: { name: string; type: string; source: string; approved: boolean }[]
@@ -163,12 +164,14 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
   const [notes, setNotes] = useState('')
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null)
   const [dinnerDate, setDinnerDate] = useState<string>(new Date().toISOString().slice(0, 10) + 'T12:00')
+  const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'other'>('dinner')
   const [tags, setTags] = useState<Tag[]>([])
   const [newTagInput, setNewTagInput] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [showValidationErrors, setShowValidationErrors] = useState(false)
   const [healthScore, setHealthScore] = useState<number | null>(null)
+  const [hasUploadedPhoto, setHasUploadedPhoto] = useState(false)
 
   // Default places - Home is always available
   const defaultPlaces: Place[] = [
@@ -213,7 +216,11 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
       // Set existing photo
       if (editDinner.photos.length > 0) {
         setPreviewUrl(editDinner.photos[0].url)
+        setHasUploadedPhoto(true)
       }
+      
+      // Set meal type
+      setMealType(editDinner.meal_type || 'dinner')
       
       // Set tags
       const existingTags: Tag[] = editDinner.tags.map(tag => ({
@@ -377,6 +384,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
       setSelectedFile(file)
       const url = URL.createObjectURL(file)
       setPreviewUrl(url)
+      setHasUploadedPhoto(true) // Show attributes as soon as photo is selected
       
       // Reset AI analysis state
       setHealthScore(null)
@@ -624,7 +632,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
             datetime: new Date(dinnerDate).toISOString(),
             place_id: placeId,
             notes: combinedNotes,
-
+            meal_type: mealType,
             health_score: healthScore,
           })
           .eq('id', editDinner.id)
@@ -667,7 +675,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
             datetime: new Date(dinnerDate).toISOString(),
             place_id: placeId,
             notes: combinedNotes,
-
+            meal_type: mealType,
             health_score: healthScore,
             favorite: false
           })
@@ -765,9 +773,11 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
     setNotes('')
     setSelectedPlace(null)
     setDinnerDate(new Date().toISOString().slice(0, 10) + 'T12:00')
+    setMealType('dinner')
     setTags([])
     setNewTagInput('')
     setHealthScore(null)
+    setHasUploadedPhoto(false)
     setIsAnalyzing(false)
     setIsSaving(false)
     setShowValidationErrors(false)
@@ -830,18 +840,11 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
                   onClick={() => {
                     setSelectedFile(null)
                     setPreviewUrl(null)
+                    // Don't reset hasUploadedPhoto - keep attributes visible
                   }}
                 >
                   <X className="h-4 w-4" />
                 </Button>
-                {isAnalyzing && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg">
-                    <div className="text-white text-center">
-                      <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-                      <p>Analyzing...</p>
-                    </div>
-                  </div>
-                )}
                 {!isAnalyzing && previewUrl && (
                   <div className="absolute bottom-2 left-2">
                     <Button
@@ -880,6 +883,9 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
             )}
         </div>
 
+        {/* Attributes Section - Only show after photo upload or when editing */}
+        {(hasUploadedPhoto || editDinner) && (
+          <>
           {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="title" className={showValidationErrors && !title.trim() ? "text-red-500 font-bold" : ""}>
@@ -912,6 +918,22 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
               onChange={(e) => setDinnerDate(e.target.value + 'T12:00')}
               className="w-full"
             />
+          </div>
+
+          {/* Meal Type */}
+          <div className="space-y-2">
+            <Label htmlFor="meal-type">Meal Type</Label>
+            <Select value={mealType} onValueChange={(value: 'breakfast' | 'lunch' | 'dinner' | 'other') => setMealType(value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select meal type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="breakfast">🍳 Breakfast</SelectItem>
+                <SelectItem value="lunch">🥗 Lunch</SelectItem>
+                <SelectItem value="dinner">🍽️ Dinner</SelectItem>
+                <SelectItem value="other">🍴 Other</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Place */}
@@ -1070,6 +1092,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
               rows={3}
             />
         </div>
+          </>
+        )}
 
           {/* Actions */}
           <div className="flex gap-2 justify-between">
