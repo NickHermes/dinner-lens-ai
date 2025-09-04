@@ -9,7 +9,9 @@ console.log('🔧 Supabase config:', {
   keyLength: supabaseAnonKey?.length,
   isDevBuild: import.meta.env.VITE_IS_DEV_BUILD,
   branch: import.meta.env.VITE_BRANCH,
-  mode: import.meta.env.MODE
+  mode: import.meta.env.MODE,
+  base: import.meta.env.BASE_URL,
+  allEnv: Object.keys(import.meta.env).filter(key => key.startsWith('VITE_'))
 })
 
 if (!supabaseUrl || !supabaseAnonKey) {
