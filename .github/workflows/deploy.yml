@@ -2,9 +2,9 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
 
 permissions:
   contents: read
@@ -34,8 +34,8 @@ jobs:
     - name: Build
       run: npm run build
       env:
-        VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-        VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        VITE_SUPABASE_URL: ${{ github.ref == 'refs/heads/main' && secrets.VITE_SUPABASE_URL_PROD || secrets.VITE_SUPABASE_URL_DEV }}
+        VITE_SUPABASE_ANON_KEY: ${{ github.ref == 'refs/heads/main' && secrets.VITE_SUPABASE_ANON_KEY_PROD || secrets.VITE_SUPABASE_ANON_KEY_DEV }}
         VITE_OPENAI_API_KEY: ${{ secrets.VITE_OPENAI_API_KEY }}
       
     - name: Create 404.html for SPA routing
