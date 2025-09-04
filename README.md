@@ -1,5 +1,7 @@
 # Welcome to your Lovable project
 
+<!-- Trigger deployment -->
+
 ## Project info
 
 **URL**: https://lovable.dev/projects/e3ac812a-8ed2-4bcb-a454-2492c213d6f6
