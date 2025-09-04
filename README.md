@@ -2,6 +2,10 @@
 
 <!-- Trigger deployment - test fixed Supabase secrets -->
 
+## Development Environment
+- **Dev URL**: https://nickhermes.github.io/dinner-lens-ai-dev/
+- **Dev Database**: https://bvzclxdppwpayawrnrkz.supabase.co
+
 ## Project info
 
 **URL**: https://lovable.dev/projects/e3ac812a-8ed2-4bcb-a454-2492c213d6f6
