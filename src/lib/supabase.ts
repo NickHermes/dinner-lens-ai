@@ -6,11 +6,18 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 console.log('🔧 Supabase config:', {
   url: supabaseUrl,
   keyExists: !!supabaseAnonKey,
-  keyLength: supabaseAnonKey?.length
+  keyLength: supabaseAnonKey?.length,
+  isDevBuild: import.meta.env.VITE_IS_DEV_BUILD,
+  allEnvVars: import.meta.env
 })
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables')
+  console.error('❌ Missing Supabase environment variables:', {
+    url: supabaseUrl,
+    key: supabaseAnonKey,
+    isDevBuild: import.meta.env.VITE_IS_DEV_BUILD
+  })
+  throw new Error(`Missing Supabase environment variables: URL=${supabaseUrl}, Key=${!!supabaseAnonKey}`)
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
