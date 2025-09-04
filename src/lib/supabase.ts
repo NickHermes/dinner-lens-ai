@@ -28,6 +28,7 @@ export interface Dinner {
   place_id?: string
   notes?: string
   favorite: boolean
+  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'other'
   ai_caption?: string
   nutrition_calories?: number
   nutrition_protein_g?: number
