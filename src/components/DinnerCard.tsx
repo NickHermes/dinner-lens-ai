@@ -10,6 +10,8 @@ interface Dinner {
   notes?: string;
   favorite?: boolean;
   health_score?: number;
+  deliciousness?: number;
+  effort?: 'easy' | 'medium' | 'hard';
   places?: {
     name: string;
     type: string;
@@ -96,6 +98,41 @@ export const DinnerCard = ({ dinner, onClick }: DinnerCardProps) => {
         <div className="flex items-center text-xs text-muted-foreground mb-2">
           <MapPin className="w-3 h-3 mr-1" />
           <span>{placeName}</span>
+        </div>
+
+        {/* Yummy Factor and Effort Level */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+          {dinner.deliciousness && (
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground">Yummy:</span>
+              <div className="flex items-center gap-0.5">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <span
+                    key={star}
+                    className={`text-xs ${star <= dinner.deliciousness! ? 'text-yellow-400' : 'text-gray-300'}`}
+                  >
+                    ★
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {dinner.effort && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Effort:</span>
+              <Badge 
+                variant="outline" 
+                className={`text-xs ${
+                  dinner.effort === 'easy' ? 'bg-green-100 text-green-800 border-green-200' :
+                  dinner.effort === 'medium' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                  'bg-red-100 text-red-800 border-red-200'
+                }`}
+              >
+                {dinner.effort.charAt(0).toUpperCase() + dinner.effort.slice(1)}
+              </Badge>
+            </div>
+          )}
         </div>
         
         <div className="flex flex-wrap gap-1">

@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { getHealthScoreBadgeVariant, getHealthScoreBadgeClass } from '@/lib/utils'
+import { extractExifData } from '@/lib/exif'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 
@@ -147,6 +148,8 @@ interface AddDinnerProps {
   place_id?: string
   notes: string
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'other'
+  deliciousness?: number
+  effort?: 'easy' | 'medium' | 'hard'
   health_score?: number
   photos: { url: string }[]
   tags: { name: string; type: string; source: string; approved: boolean }[]
@@ -172,6 +175,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
   const [showValidationErrors, setShowValidationErrors] = useState(false)
   const [healthScore, setHealthScore] = useState<number | null>(null)
   const [hasUploadedPhoto, setHasUploadedPhoto] = useState(false)
+  const [deliciousness, setDeliciousness] = useState<number | null>(null)
+  const [effort, setEffort] = useState<'easy' | 'medium' | 'hard' | null>(null)
 
   // Default places - Home is always available
   const defaultPlaces: Place[] = [
@@ -221,6 +226,10 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
       
       // Set meal type
       setMealType(editDinner.meal_type || 'dinner')
+      
+      // Set deliciousness and effort
+      setDeliciousness(editDinner.deliciousness || null)
+      setEffort(editDinner.effort || null)
       
       // Set tags
       const existingTags: Tag[] = editDinner.tags.map(tag => ({
@@ -633,6 +642,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
             place_id: placeId,
             notes: combinedNotes,
             meal_type: mealType,
+            deliciousness: deliciousness,
+            effort: effort,
             health_score: healthScore,
           })
           .eq('id', editDinner.id)
@@ -645,12 +656,25 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
         
         // Update photo if new one was uploaded
         if (selectedFile && publicUrl) {
+          let exifData = { width: 0, height: 0 }
+          
+          // Extract EXIF data from the new file
+          try {
+            exifData = await extractExifData(selectedFile)
+            console.log('Extracted EXIF data for update:', exifData)
+          } catch (error) {
+            console.warn('Failed to extract EXIF data for update:', error)
+          }
+          
           const { error: photoError } = await supabase
             .from('photos')
             .update({
               url: publicUrl,
-              width: 0,
-              height: 0
+              width: exifData.width || 0,
+              height: exifData.height || 0,
+              exif_lat: exifData.latitude || null,
+              exif_lon: exifData.longitude || null,
+              exif_time: exifData.timestamp || null
             })
             .eq('dinner_id', editDinner.id)
           
@@ -676,6 +700,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
             place_id: placeId,
             notes: combinedNotes,
             meal_type: mealType,
+            deliciousness: deliciousness,
+            effort: effort,
             health_score: healthScore,
             favorite: false
           })
@@ -686,15 +712,30 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
         dinnerData = data
         console.log('Dinner data:', dinnerData)
         
-        // Save photo to photos table
+        // Save photo to photos table with EXIF data
         if (publicUrl) {
+          let exifData = { width: 0, height: 0 }
+          
+          // Extract EXIF data if we have a new file
+          if (selectedFile) {
+            try {
+              exifData = await extractExifData(selectedFile)
+              console.log('Extracted EXIF data:', exifData)
+            } catch (error) {
+              console.warn('Failed to extract EXIF data:', error)
+            }
+          }
+          
           const { error: photoError } = await supabase
             .from('photos')
             .insert({
               dinner_id: dinnerData.id,
               url: publicUrl,
-              width: 0,
-              height: 0
+              width: exifData.width || 0,
+              height: exifData.height || 0,
+              exif_lat: exifData.latitude || null,
+              exif_lon: exifData.longitude || null,
+              exif_time: exifData.timestamp || null
             })
           
           if (photoError) throw photoError
@@ -777,6 +818,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
     setTags([])
     setNewTagInput('')
     setHealthScore(null)
+    setDeliciousness(null)
+    setEffort(null)
     setHasUploadedPhoto(false)
     setIsAnalyzing(false)
     setIsSaving(false)
@@ -928,10 +971,10 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
                 <SelectValue placeholder="Select meal type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="breakfast">🍳 Breakfast</SelectItem>
-                <SelectItem value="lunch">🥗 Lunch</SelectItem>
-                <SelectItem value="dinner">🍽️ Dinner</SelectItem>
-                <SelectItem value="other">🍴 Other</SelectItem>
+                <SelectItem value="breakfast">Breakfast</SelectItem>
+                <SelectItem value="lunch">Lunch</SelectItem>
+                <SelectItem value="dinner">Dinner</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -1081,6 +1124,61 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
             </div>
           </div>
 
+          {/* Deliciousness Rating */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">How Yummy? (1-5 stars)</Label>
+              {deliciousness && (
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <span
+                      key={star}
+                      className={`text-lg ${star <= deliciousness ? 'text-yellow-400' : 'text-gray-300'}`}
+                    >
+                      ★
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5].map((rating) => (
+                <Button
+                  key={rating}
+                  variant={deliciousness === rating ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDeliciousness(deliciousness === rating ? null : rating)}
+                  className="flex items-center gap-1"
+                >
+                  <span className="text-yellow-400">★</span>
+                  {rating}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Effort Level */}
+          <div className="space-y-2">
+            <Label>Effort Level</Label>
+            <div className="flex gap-2">
+              {[
+                { value: 'easy', label: 'Easy', color: 'bg-green-100 text-green-800 hover:bg-green-200' },
+                { value: 'medium', label: 'Medium', color: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200' },
+                { value: 'hard', label: 'Hard', color: 'bg-red-100 text-red-800 hover:bg-red-200' }
+              ].map(({ value, label, color }) => (
+                <Button
+                  key={value}
+                  variant={effort === value ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setEffort(effort === value ? null : value as 'easy' | 'medium' | 'hard')}
+                  className={effort === value ? color : ''}
+                >
+                  {label}
+              </Button>
+              ))}
+            </div>
+          </div>
+
           {/* Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
@@ -1091,7 +1189,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
             />
-        </div>
+          </div>
           </>
         )}
 

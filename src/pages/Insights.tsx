@@ -75,7 +75,7 @@ const StatCard = ({ title, value, subtitle, icon: Icon, trend }: {
 
 const Insights = () => {
   return (
-    <div className="min-h-screen bg-gradient-background pb-20">
+    <div className="min-h-screen bg-gradient-background pb-24">
       {/* Header */}
       <header className="bg-card/80 backdrop-blur-sm border-b border-border sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
