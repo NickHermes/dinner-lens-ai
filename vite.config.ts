@@ -11,8 +11,9 @@ export default defineConfig(({ mode }) => {
   if (mode === 'development') {
     basePath = '/'; // Local development
   } else {
-    // Production builds - check if this is a development build by looking at environment variables
-    const isDevBuild = process.env.VITE_SUPABASE_URL?.includes('bvzclxdppwpayawrnrkz');
+    // Production builds - check if this is a development build by looking at the branch
+    // We'll set this via environment variable in the GitHub Actions workflow
+    const isDevBuild = process.env.VITE_IS_DEV_BUILD === 'true';
     basePath = isDevBuild ? '/dinner-lens-ai-dev/' : '/dinner-lens-ai/';
   }
   

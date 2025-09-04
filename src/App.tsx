@@ -19,8 +19,8 @@ const getBasename = () => {
     return '/'; // Local development
   }
   
-  // Production builds - check which database we're using
-  const isDevBuild = import.meta.env.VITE_SUPABASE_URL?.includes('bvzclxdppwpayawrnrkz');
+  // Production builds - check if this is a development build
+  const isDevBuild = import.meta.env.VITE_IS_DEV_BUILD === 'true';
   return isDevBuild ? '/dinner-lens-ai-dev' : '/dinner-lens-ai';
 };
 
