@@ -13,16 +13,8 @@ import SupabaseTest from "./components/SupabaseTest";
 
 const queryClient = new QueryClient();
 
-// Use different basenames for development vs production
-const getBasename = () => {
-  if (import.meta.env.DEV) {
-    return '/'; // Local development
-  }
-  
-  // Production builds - check if this is a development build
-  const isDevBuild = import.meta.env.VITE_IS_DEV_BUILD === 'true';
-  return isDevBuild ? '/dinner-lens-ai-dev' : '/dinner-lens-ai';
-};
+// Basename: root in dev, repo path in production
+const getBasename = () => (import.meta.env.DEV ? '/' : '/dinner-lens-ai');
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
