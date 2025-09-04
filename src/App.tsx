@@ -13,14 +13,15 @@ import SupabaseTest from "./components/SupabaseTest";
 
 const queryClient = new QueryClient();
 
-// Use consistent basename for GitHub Pages
+// Use different basenames for development vs production
 const getBasename = () => {
   if (import.meta.env.DEV) {
     return '/'; // Local development
   }
   
-  // Production builds - use consistent path
-  return '/dinner-lens-ai';
+  // Production builds - check which database we're using
+  const isDevBuild = import.meta.env.VITE_SUPABASE_URL?.includes('bvzclxdppwpayawrnrkz');
+  return isDevBuild ? '/dinner-lens-ai-dev' : '/dinner-lens-ai';
 };
 
 const App = () => (

@@ -5,8 +5,16 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Use consistent base path for GitHub Pages
-  const basePath = '/dinner-lens-ai/';
+  // Use different base paths for development vs production
+  let basePath = '/';
+  
+  if (mode === 'development') {
+    basePath = '/'; // Local development
+  } else {
+    // Production builds - check if this is a development build by looking at environment variables
+    const isDevBuild = process.env.VITE_SUPABASE_URL?.includes('bvzclxdppwpayawrnrkz');
+    basePath = isDevBuild ? '/dinner-lens-ai-dev/' : '/dinner-lens-ai/';
+  }
   
   return {
     base: basePath,
