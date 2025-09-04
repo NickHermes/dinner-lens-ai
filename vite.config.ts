@@ -14,8 +14,20 @@ export default defineConfig(({ mode }) => {
     // Production builds - check if this is a development build by looking at the branch
     // We'll set this via environment variable in the GitHub Actions workflow
     const isDevBuild = process.env.VITE_IS_DEV_BUILD === 'true';
+    const branch = process.env.VITE_BRANCH;
+    
+    console.log('🔧 Vite config:', {
+      mode,
+      isDevBuild,
+      branch,
+      VITE_IS_DEV_BUILD: process.env.VITE_IS_DEV_BUILD,
+      VITE_BRANCH: process.env.VITE_BRANCH
+    });
+    
     basePath = isDevBuild ? '/dinner-lens-ai-dev/' : '/dinner-lens-ai/';
   }
+  
+  console.log('🔧 Final base path:', basePath);
   
   return {
     base: basePath,
