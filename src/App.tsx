@@ -13,13 +13,24 @@ import SupabaseTest from "./components/SupabaseTest";
 
 const queryClient = new QueryClient();
 
+// Determine basename based on environment
+const getBasename = () => {
+  if (import.meta.env.DEV) {
+    return '/'; // Local development
+  }
+  
+  // Production builds - check which database we're using
+  const isDevBuild = import.meta.env.VITE_SUPABASE_URL?.includes('bvzclxdppwpayawrnrkz');
+  return isDevBuild ? '/dinner-lens-ai-dev' : '/dinner-lens-ai';
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter basename={import.meta.env.PROD ? '/dinner-lens-ai' : '/'}>
+        <BrowserRouter basename={getBasename()}>
           <AuthGate>
             <Routes>
               <Route path="/" element={<Index />} />
