@@ -19,7 +19,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 
-// Database types
+ // Database types
 export interface Dinner {
   id: string
   user_id: string
