@@ -42,9 +42,15 @@ export const extractExifData = (file: File): Promise<ExifData> => {
         ).toISOString()
       }
       
-      // Extract image dimensions
-      exifData.width = EXIF.getTag(this, 'PixelXDimension') || file.width
-      exifData.height = EXIF.getTag(this, 'PixelYDimension') || file.height
+      // Extract image dimensions - try multiple EXIF tags
+      exifData.width = EXIF.getTag(this, 'PixelXDimension') || 
+                      EXIF.getTag(this, 'ImageWidth') || 
+                      EXIF.getTag(this, 'ExifImageWidth') || 
+                      undefined
+      exifData.height = EXIF.getTag(this, 'PixelYDimension') || 
+                       EXIF.getTag(this, 'ImageHeight') || 
+                       EXIF.getTag(this, 'ExifImageHeight') || 
+                       undefined
       
       resolve(exifData)
     })
