@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast } from '@/components/ui/use-toast'
-import { extractExifData } from '@/lib/exif'
+import { processFileAndExtractExif } from '@/lib/exif'
 
 export interface AITag {
   name: string
@@ -61,10 +61,11 @@ export const useAI = () => {
 
       if (error) throw error
 
-      // Extract EXIF data from the uploaded file
-      let exifData = { width: 0, height: 0 }
+      // Process file and extract EXIF data
+      let exifData: any = { width: 0, height: 0 }
       try {
-        exifData = await extractExifData(imageFile)
+        const processed = await processFileAndExtractExif(imageFile)
+        exifData = processed.exifData
         console.log('Extracted EXIF data in useAI:', exifData)
       } catch (error) {
         console.warn('Failed to extract EXIF data in useAI:', error)
