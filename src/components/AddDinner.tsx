@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { getHealthScoreBadgeVariant, getHealthScoreBadgeClass } from '@/lib/utils'
-import { extractExifData } from '@/lib/exif'
+import { processFileAndExtractExif, extractExifData, convertHeicForPreview } from '@/lib/exif'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 
@@ -153,6 +153,7 @@ interface AddDinnerProps {
   health_score?: number
   photos: { url: string }[]
   tags: { name: string; type: string; source: string; approved: boolean }[]
+  places?: { id: string; name: string; type: string; lat: number; lon: number; radius_m: number }
   }
   onSave?: () => void
 }
@@ -177,6 +178,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
   const [hasUploadedPhoto, setHasUploadedPhoto] = useState(false)
   const [deliciousness, setDeliciousness] = useState<number | null>(null)
   const [effort, setEffort] = useState<'easy' | 'medium' | 'hard' | null>(null)
+  const [currentLocation, setCurrentLocation] = useState<{latitude: number, longitude: number} | null>(null)
 
   // Default places - Home is always available
   const defaultPlaces: Place[] = [
@@ -387,13 +389,104 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
 
 
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
-      setSelectedFile(file)
-      const url = URL.createObjectURL(file)
-      setPreviewUrl(url)
-      setHasUploadedPhoto(true) // Show attributes as soon as photo is selected
+      console.log('🔍 File selected from mobile:', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        lastModified: new Date(file.lastModified).toISOString()
+      })
+      
+      try {
+        // Process file for preview and upload
+        console.log('📂 Processing file:', file.name)
+        const processed = await processFileAndExtractExif(file)
+        console.log('✅ File processing completed:', processed)
+        setSelectedFile(processed.file)
+        
+        // Handle HEIC files differently
+        const isHEIC = file.type === 'image/heic' || file.type === 'image/heif' || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')
+        
+        if (isHEIC) {
+          // Try to convert HEIC for preview
+          try {
+            console.log('Attempting HEIC preview conversion...')
+            const convertedFile = await convertHeicForPreview(file)
+            
+            if (convertedFile) {
+              // Conversion successful - show real preview
+              const url = URL.createObjectURL(convertedFile)
+              setPreviewUrl(url)
+              console.log('HEIC preview conversion successful')
+            } else {
+              // Conversion failed - use placeholder
+              setPreviewUrl('heic-placeholder')
+              console.log('HEIC preview conversion failed - using placeholder')
+            }
+          } catch (error) {
+            // Conversion error - use placeholder
+            console.warn('HEIC preview conversion error:', error)
+            setPreviewUrl('heic-placeholder')
+          }
+        } else {
+          // For other formats, create normal preview
+          const url = URL.createObjectURL(processed.file)
+          setPreviewUrl(url)
+          console.log('Regular image file processed:', {
+            type: processed.file.type,
+            name: processed.file.name,
+            size: processed.file.size,
+            previewUrl: url
+          })
+        }
+        
+        setHasUploadedPhoto(true) // Show attributes as soon as photo is selected
+        
+        // Try to get current location since EXIF GPS data is stripped by mobile browsers
+        if (navigator.geolocation) {
+          console.log('📍 Requesting current location...')
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              console.log('✅ Current location obtained:', {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy
+              })
+              // Store location for use during save
+              setCurrentLocation({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude
+              })
+            },
+            (error) => {
+              console.log('📍 Location not available (HTTPS required or permission denied) - using manual selection')
+              // User denied location or it's not available - that's okay
+            },
+            { timeout: 10000, enableHighAccuracy: true }
+          )
+        }
+        
+        console.log('File processed for upload:', {
+          originalType: file.type,
+          originalName: file.name,
+          originalSize: file.size,
+          processedType: processed.file.type,
+          processedName: processed.file.name,
+          processedSize: processed.file.size,
+          exifData: processed.exifData,
+          isHEIC: isHEIC
+        })
+      } catch (error) {
+        console.error('❌ Error processing file:', error)
+        // Fallback to original file if conversion fails
+        setSelectedFile(file)
+        const url = URL.createObjectURL(file)
+        setPreviewUrl(url)
+        setHasUploadedPhoto(true)
+        toast.error('File processed with limited features (EXIF data may not be available)')
+      }
       
       // Reset AI analysis state
       setHealthScore(null)
@@ -414,12 +507,40 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
       
       // If we have a new file to upload, upload it first
       if (selectedFile) {
-        const fileExt = selectedFile.name.split('.').pop()
+        let fileToUpload = selectedFile
+        
+        // Convert HEIC to JPEG for AI analysis if needed
+        const isHEIC = selectedFile.type === 'image/heic' || selectedFile.type === 'image/heif' || selectedFile.name.toLowerCase().endsWith('.heic') || selectedFile.name.toLowerCase().endsWith('.heif')
+        
+        if (isHEIC) {
+          // Try to convert HEIC for AI analysis
+          try {
+            console.log('Converting HEIC for AI analysis...')
+            const convertedFile = await convertHeicForPreview(selectedFile)
+            
+            if (convertedFile) {
+              console.log('Using converted HEIC file for AI analysis')
+              fileToUpload = convertedFile
+            } else {
+              console.log('HEIC conversion failed - skipping AI analysis')
+              toast.error('AI analysis not available for this HEIC file. Conversion failed.')
+              setIsAnalyzing(false)
+              return
+            }
+          } catch (error) {
+            console.error('HEIC conversion error for AI analysis:', error)
+            toast.error('AI analysis not available for HEIC files. Conversion failed.')
+            setIsAnalyzing(false)
+            return
+          }
+        }
+        
+        const fileExt = fileToUpload.name.split('.').pop()
         const fileName = `${user.id}/${Date.now()}.${fileExt}`
         
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('dinner-photos')
-          .upload(fileName, selectedFile)
+          .upload(fileName, fileToUpload)
         
         if (uploadError) throw uploadError
         
@@ -605,12 +726,37 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
       
       // Upload new image if provided
       if (selectedFile) {
-        const fileExt = selectedFile.name.split('.').pop()
+        let fileToUpload = selectedFile
+        
+        // Convert HEIC to JPEG for upload if needed
+        const isHEIC = selectedFile.type === 'image/heic' || selectedFile.type === 'image/heif' || selectedFile.name.toLowerCase().endsWith('.heic') || selectedFile.name.toLowerCase().endsWith('.heif')
+        
+        if (isHEIC) {
+          // Convert HEIC to JPEG for upload so browsers can display it
+          console.log('HEIC file detected - converting to JPEG for upload')
+          try {
+            const convertedFile = await convertHeicForPreview(selectedFile)
+            if (convertedFile) {
+              fileToUpload = convertedFile
+              console.log('HEIC converted to JPEG for upload:', {
+                originalSize: selectedFile.size,
+                convertedSize: convertedFile.size
+              })
+            } else {
+              throw new Error('HEIC conversion failed')
+            }
+          } catch (error) {
+            console.error('HEIC conversion failed:', error)
+            throw new Error('Unable to upload HEIC file. Please try with a JPEG or PNG image.')
+          }
+        }
+        
+        const fileExt = isHEIC ? 'jpg' : fileToUpload.name.split('.').pop()
         const fileName = `${user.id}/${Date.now()}.${fileExt}`
         
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('dinner-photos')
-          .upload(fileName, selectedFile)
+          .upload(fileName, fileToUpload)
         
         if (uploadError) throw uploadError
         
@@ -656,11 +802,12 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
         
         // Update photo if new one was uploaded
         if (selectedFile && publicUrl) {
-          let exifData = { width: 0, height: 0 }
+          let exifData: any = { width: 0, height: 0 }
           
-          // Extract EXIF data from the new file
+          // Extract EXIF data from the selected file
           try {
-            exifData = await extractExifData(selectedFile)
+            const fileForExif = selectedFile
+            exifData = await extractExifData(fileForExif)
             console.log('Extracted EXIF data for update:', exifData)
           } catch (error) {
             console.warn('Failed to extract EXIF data for update:', error)
@@ -672,8 +819,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
               url: publicUrl,
               width: exifData.width || 0,
               height: exifData.height || 0,
-              exif_lat: exifData.latitude || null,
-              exif_lon: exifData.longitude || null,
+              exif_lat: exifData.latitude || currentLocation?.latitude || null,
+              exif_lon: exifData.longitude || currentLocation?.longitude || null,
               exif_time: exifData.timestamp || null
             })
             .eq('dinner_id', editDinner.id)
@@ -714,12 +861,13 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
         
         // Save photo to photos table with EXIF data
         if (publicUrl) {
-          let exifData = { width: 0, height: 0 }
+          let exifData: any = { width: 0, height: 0 }
           
-          // Extract EXIF data if we have a new file
+          // Extract EXIF data from the converted file if we have a new file
           if (selectedFile) {
             try {
-              exifData = await extractExifData(selectedFile)
+              const fileForExif = selectedFile
+              exifData = await extractExifData(fileForExif)
               console.log('Extracted EXIF data:', exifData)
             } catch (error) {
               console.warn('Failed to extract EXIF data:', error)
@@ -733,8 +881,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
               url: publicUrl,
               width: exifData.width || 0,
               height: exifData.height || 0,
-              exif_lat: exifData.latitude || null,
-              exif_lon: exifData.longitude || null,
+              exif_lat: exifData.latitude || currentLocation?.latitude || null,
+              exif_lon: exifData.longitude || currentLocation?.longitude || null,
               exif_time: exifData.timestamp || null
             })
           
@@ -871,11 +1019,20 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
             <Label>Photo</Label>
             {previewUrl ? (
               <div className="relative">
-                <img 
-                  src={previewUrl} 
-                  alt="Dinner preview" 
-                  className="w-full h-48 object-cover rounded-lg"
-                />
+                {previewUrl === 'heic-placeholder' ? (
+                  <div className="w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-100 border-2 border-dashed border-blue-300 rounded-lg flex flex-col items-center justify-center">
+                    <Camera className="h-12 w-12 text-blue-400 mb-2" />
+                    <p className="text-blue-600 font-medium text-sm">HEIC Photo Selected</p>
+                    <p className="text-blue-500 text-xs mt-1">{selectedFile?.name}</p>
+                    <p className="text-blue-400 text-xs mt-1">Preview not available • Upload will work</p>
+                  </div>
+                ) : (
+                  <img 
+                    src={previewUrl} 
+                    alt="Dinner preview" 
+                    className="w-full h-48 object-cover rounded-lg"
+                  />
+                )}
                 <Button
                   variant="destructive"
                   size="sm"
@@ -888,7 +1045,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
                 >
                   <X className="h-4 w-4" />
                 </Button>
-                {!isAnalyzing && previewUrl && (
+                {!isAnalyzing && previewUrl && previewUrl !== 'heic-placeholder' && (
                   <div className="absolute bottom-2 left-2">
                     <Button
                       onClick={analyzeImage}
@@ -918,7 +1075,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
             <input
                   ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,image/heic,image/heif,.heic,.heif"
               onChange={handleFileSelect}
               className="hidden"
                 />

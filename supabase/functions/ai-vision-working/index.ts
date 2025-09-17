@@ -15,6 +15,7 @@ serve(async (req) => {
     
     console.log('AI Vision Working - Request received:', { imageUrl, userId })
     
+    
     // Get OpenAI API key from Supabase secrets
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
     if (!openaiApiKey) {
