@@ -10,7 +10,7 @@ export const FloatingActionButton = ({ onClick }: FloatingActionButtonProps) => 
     <Button
       variant="fab"
       size="fab" 
-      className="fixed bottom-20 right-4 z-50 shadow-glow hover:shadow-strong transition-smooth"
+      className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-50 shadow-glow hover:shadow-strong transition-smooth"
       aria-label="Add dinner"
       onClick={onClick}
     >

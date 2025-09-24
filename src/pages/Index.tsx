@@ -1,4 +1,4 @@
-import { Search, Plus, LogOut, Camera, Info } from "lucide-react";
+import { Search, Plus, LogOut, Camera, Info, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,14 +6,16 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { FloatingActionButton } from "@/components/FloatingActionButton";
 import { DinnerCard } from "@/components/DinnerCard";
 import { DinnerDetail } from "@/components/DinnerDetail";
+import { DishCard } from "@/components/DishCard";
+import { DishDetail } from "@/components/DishDetail";
 import { AddDinner } from "@/components/AddDinner";
+import { MealTypeSelector } from "@/components/MealTypeSelector";
 import { BottomNavigation } from "@/components/BottomNavigation";
-import { AISearch } from "@/components/AISearch";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { useState } from "react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useState, useMemo } from "react";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 
 // Mock data for demonstration
 const mockDinners = [
@@ -54,18 +56,77 @@ const mockDinners = [
 const Index = () => {
   const { user, signOut } = useAuth();
   const queryClient = useQueryClient();
-  const [selectedDinner, setSelectedDinner] = useState<any>(null);
+  const [selectedDish, setSelectedDish] = useState<any>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [showMealTypeSelector, setShowMealTypeSelector] = useState(false);
   const [showAddDinner, setShowAddDinner] = useState(false);
   const [editDinner, setEditDinner] = useState<any>(null);
+  const [repeatMealData, setRepeatMealData] = useState<any>(null);
+  const [initialTitle, setInitialTitle] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const handleDinnerClick = (dinner: any) => {
-    setSelectedDinner(dinner);
+  const handleDishClick = (dish: any) => {
+    setSelectedDish(dish);
     setShowDetail(true);
   };
 
-  const handleEditDinner = (dinner: any) => {
-    setEditDinner(dinner);
+  const handleEditInstance = (instance: any) => {
+    // Convert instance back to old dinner format for editing
+    const dinnerForEdit = {
+      id: instance.id,
+      title: selectedDish?.title || '',
+      datetime: instance.datetime,
+      place_id: instance.place_id,
+      location: instance.location || '', // Add location field
+      variant_title: instance.variant_title || '', // Add variant title field
+      notes: instance.notes || '',
+      meal_type: selectedDish?.meal_type, // Now from dish level
+      deliciousness: null,
+      effort: selectedDish?.effort, // Now from dish level
+      health_score: selectedDish?.health_score,
+      photos: instance.photo_url ? [{ url: instance.photo_url }] : [],
+      tags: instance.tags || [], // Load variant tags
+      places: instance.places,
+      count: instance.count || 1, // Include count for conditional logic
+      isVariantEdit: true // Flag to indicate this is variant-level editing
+    };
+    
+    setEditDinner(dinnerForEdit);
+    setShowDetail(false);
+    setShowAddDinner(true);
+  };
+
+  const handleEditDish = () => {
+    // Edit dish-level properties (title, health score, effort, meal type, base tags)
+    const dishForEdit = {
+      id: selectedDish?.id,
+      title: selectedDish?.title || '',
+      datetime: new Date().toISOString(), // Current time as placeholder
+      place_id: null,
+      notes: selectedDish?.notes || '', // Use dish notes, not empty string
+      meal_type: selectedDish?.meal_type,
+      deliciousness: null,
+      effort: selectedDish?.effort,
+      health_score: selectedDish?.health_score,
+      photos: selectedDish?.base_photo_url ? [{ url: selectedDish.base_photo_url }] : [],
+      tags: selectedDish?.base_tags || [],
+      places: null,
+      isDishEdit: true, // Flag to indicate this is dish-level editing
+      variantPhotos: selectedDish?.dinner_instances?.filter(instance => 
+        instance.photo_url && instance.photo_url !== selectedDish.base_photo_url
+      ).sort((a, b) => {
+        // Sort by last_consumed (newest first), fallback to datetime
+        const aDate = a.last_consumed || a.datetime
+        const bDate = b.last_consumed || b.datetime
+        return new Date(bDate).getTime() - new Date(aDate).getTime()
+      }).map(instance => ({
+        url: instance.photo_url,
+        variant_title: instance.variant_title,
+        datetime: instance.datetime
+      })) || [] // Pass variant photos for selection (excluding current base photo, ordered newest to oldest)
+    };
+    
+    setEditDinner(dishForEdit);
     setShowDetail(false);
     setShowAddDinner(true);
   };
@@ -73,125 +134,225 @@ const Index = () => {
   const handleCloseAddDinner = () => {
     setShowAddDinner(false);
     setEditDinner(null);
+    setRepeatMealData(null);
+    setInitialTitle('');
   };
 
-  const refreshDinners = () => {
-    queryClient.invalidateQueries({ queryKey: ['dinners', user?.id] });
+  const handleNewDish = (searchQuery?: string) => {
+    setShowMealTypeSelector(false);
+    setEditDinner(null);
+    setRepeatMealData(null);
+    setShowAddDinner(true);
+    // Store the search query to pre-fill the title in AddDinner
+    if (searchQuery) {
+      setInitialTitle(searchQuery);
+    }
+  };
+
+  const handleRepeatMeal = (dishData: any) => {
+    setShowMealTypeSelector(false);
+    setRepeatMealData(dishData);
+    setEditDinner(null);
+    setShowAddDinner(true);
+  };
+
+  const refreshDishes = () => {
+    // Invalidate and refetch all related queries
+    queryClient.invalidateQueries({ queryKey: ['dishes', user?.id] });
     queryClient.invalidateQueries({ queryKey: ['stats', user?.id] });
+    queryClient.invalidateQueries({ queryKey: ['locations', user?.id] });
+    
+    // Force refetch to ensure immediate updates
+    queryClient.refetchQueries({ queryKey: ['dishes', user?.id] });
+    queryClient.refetchQueries({ queryKey: ['stats', user?.id] });
+    queryClient.refetchQueries({ queryKey: ['locations', user?.id] });
   };
 
-  // Fetch real dinners from Supabase
-  const { data: dinners = [], isLoading } = useQuery({
-    queryKey: ['dinners', user?.id],
+  // Fetch dishes from Supabase
+  const { data: dishes = [], isLoading } = useQuery({
+    queryKey: ['dishes', user?.id],
     queryFn: async () => {
-      if (!user) return [];
+      if (!user) {
+        console.log('No user found');
+        return [];
+      }
       
+      console.log('Fetching dishes for user:', user.id);
+      
+      // Load dishes with their instances and tags
       const { data, error } = await supabase
-        .from('dinners')
+        .from('dishes')
         .select(`
-          id, title, datetime, notes, favorite, health_score, deliciousness, effort,
-          places(name, type),
-          photos(url),
-          tags(name, type, approved)
+          id, title, health_score, base_photo_url, effort, meal_type, notes, created_at, updated_at,
+          dinner_instances(id, datetime, location, variant_title, notes, photo_url, place_id, count, last_consumed, consumption_records(id)),
+          tags!left(name, type, is_base_tag)
         `)
         .eq('user_id', user.id)
-        .order('datetime', { ascending: false })
+        .order('updated_at', { ascending: false })
         .limit(20);
       
-      if (error) throw error;
-      return data || [];
+      if (error) {
+        console.error('Supabase query error:', error);
+        throw error;
+      }
+      
+      console.log('Raw dishes data:', data);
+      
+      // Transform data to include latest instance and total consumption count
+      const transformedData = data?.map(dish => {
+        const instances = dish.dinner_instances || [];
+        const latestInstance = instances.sort((a, b) => 
+          new Date(b.datetime).getTime() - new Date(a.datetime).getTime()
+        )[0];
+        
+        // Calculate total consumption logs across all variants
+        const totalConsumptionLogs = instances.reduce((sum, instance) => {
+          return sum + (instance.consumption_records?.length || 1);
+        }, 0);
+        
+        return {
+          ...dish,
+          latest_instance: latestInstance,
+          total_instances: instances.length, // Keep for backward compatibility
+          total_consumption_logs: totalConsumptionLogs, // New field for total logs
+          base_tags: dish.tags?.filter(tag => tag.is_base_tag) || []
+        };
+      }) || [];
+      
+      console.log('Transformed dishes data:', transformedData);
+      
+      return transformedData;
     },
     enabled: !!user
   });
+
+  // Filter dishes based on search query
+  const filteredDishes = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return dishes;
+    }
+
+    const query = searchQuery.toLowerCase().trim();
+    
+    return dishes.filter(dish => {
+      // Search in dish title
+      if (dish.title.toLowerCase().includes(query)) {
+        return true;
+      }
+
+      // Search in dish-level tags
+      if (dish.base_tags?.some(tag => tag.name.toLowerCase().includes(query))) {
+        return true;
+      }
+
+      // Search in variant titles
+      if (dish.dinner_instances?.some(instance => {
+        // Search in variant title
+        if (instance.variant_title?.toLowerCase().includes(query)) {
+          return true;
+        }
+        
+        return false;
+      })) {
+        return true;
+      }
+
+      return false;
+    });
+  }, [dishes, searchQuery]);
 
   // Fetch stats
   const { data: stats } = useQuery({
     queryKey: ['stats', user?.id],
     queryFn: async () => {
       if (!user) return { 
-        dinners: 0, 
+        totalDishes: 0, 
+        uniqueDishes: 0,
         places: 0, 
         placesByType: { friends: 0, restaurants: 0, other: 0 },
-        cuisines: 0 
+        totalDishesByMealType: { breakfast: 0, lunch: 0, dinner: 0, other: 0 },
+        uniqueDishesByMealType: { breakfast: 0, lunch: 0, dinner: 0, other: 0 }
       };
       
-      const [dinnersResult, activePlacesResult, mockPlacesResult] = await Promise.all([
-        supabase.from('dinners').select('id', { count: 'exact' }).eq('user_id', user.id),
-        // Count real places that are actively used by dinners
-        supabase
-          .from('dinners')
-          .select('place_id')
+      try {
+        // Get total number of consumption records (total instances)
+        const { data: consumptionData, error: consumptionError } = await supabase
+          .from('consumption_records')
+          .select('id')
           .eq('user_id', user.id)
-          .not('place_id', 'is', null),
-        // Get dinners with mock places stored in notes
-        supabase
-          .from('dinners')
-          .select('notes')
+
+        if (consumptionError) throw consumptionError
+        console.log('Consumption data:', consumptionData?.length)
+
+        // Get unique locations
+        const { data: locationData, error: locationError } = await supabase
+          .from('consumption_records')
+          .select('location')
           .eq('user_id', user.id)
-          .not('notes', 'is', null)
-      ]);
-      
-      // Get unique cuisine count by joining through dinners
-      const { data: cuisineData } = await supabase
-        .from('dinners')
-        .select(`
-          tags!inner(name, type, approved)
-        `)
-        .eq('user_id', user.id)
-        .eq('tags.type', 'cuisine')
-        .eq('tags.approved', true);
-      
-      const uniqueCuisines = new Set(cuisineData?.map(d => d.tags.name) || []).size;
-      
-      // Get real places with their types
-      const realPlacesData = activePlacesResult.data?.map(d => d.place_id).filter(Boolean) || [];
-      
-      // Get place types for real places
-      let realPlacesByType = { friends: 0, restaurants: 0, other: 0 };
-      if (realPlacesData.length > 0) {
-        const { data: placesData } = await supabase
-          .from('places')
-          .select('type')
-          .in('id', realPlacesData);
-        
-        placesData?.forEach(place => {
-          if (place.type === 'friend') realPlacesByType.friends++;
-          else if (place.type === 'restaurant') realPlacesByType.restaurants++;
-          else realPlacesByType.other++;
-        });
-      }
-      
-      // Count unique mock places (places stored in notes) - assume they're "other" type
-      const mockPlaceNames = mockPlacesResult.data?.map(d => {
-        if (d.notes) {
-          const notesParts = d.notes.split(' | ');
-          if (notesParts.length > 0) {
-            const firstPart = notesParts[0].trim();
-            if (firstPart && !firstPart.includes(' ') && firstPart.length < 50) {
-              return firstPart;
-            }
+          .not('location', 'is', null)
+
+        if (locationError) throw locationError
+
+        // Count unique locations (case-insensitive)
+        const uniqueLocations = new Set(
+          locationData?.map(record => record.location?.toLowerCase().trim()).filter(Boolean) || []
+        )
+        console.log('Unique locations:', uniqueLocations.size)
+
+        // Get total number of unique dishes
+        const { data: dishesData, error: dishesError } = await supabase
+          .from('dishes')
+          .select('id')
+          .eq('user_id', user.id)
+
+        if (dishesError) throw dishesError
+        console.log('Dishes data:', dishesData?.length)
+
+        // Get meal type breakdown for unique dishes (simpler approach)
+        const { data: dishesMealTypes, error: dishesMealError } = await supabase
+          .from('dishes')
+          .select('meal_type')
+          .eq('user_id', user.id)
+
+        if (dishesMealError) throw dishesMealError
+
+        // Calculate meal type breakdowns for unique dishes
+        const dishesByMealType = { breakfast: 0, lunch: 0, dinner: 0, other: 0 }
+        dishesMealTypes?.forEach(dish => {
+          const mealType = dish.meal_type
+          if (mealType && mealType in dishesByMealType) {
+            dishesByMealType[mealType as keyof typeof dishesByMealType]++
           }
-        }
-        return null;
-      }).filter(Boolean) || [];
-      
-      const uniqueMockPlaces = new Set(mockPlaceNames).size;
-      
-      // Total unique places = real places + mock places
-      const totalUniquePlaces = realPlacesData.length + uniqueMockPlaces;
-      
-      return {
-        dinners: dinnersResult.count || 0,
-        places: totalUniquePlaces,
-        placesByType: {
-          friends: realPlacesByType.friends,
-          restaurants: realPlacesByType.restaurants,
-          other: realPlacesByType.other + uniqueMockPlaces
-        },
-        cuisines: uniqueCuisines
-      };
+        })
+
+        // For now, use the same breakdown for total dishes (we'll fix this later)
+        const consumptionByMealType = dishesByMealType
+
+        const result = { 
+          totalDishes: consumptionData?.length || 0, 
+          uniqueDishes: dishesData?.length || 0,
+          places: uniqueLocations.size, 
+          placesByType: { friends: 0, restaurants: 0, other: 0 }, // TODO: Implement place type categorization
+          totalDishesByMealType: consumptionByMealType,
+          uniqueDishesByMealType: dishesByMealType
+        };
+        console.log('Final stats result:', result);
+        return result;
+      } catch (error) {
+        console.error('Error fetching stats:', error)
+        return { 
+          totalDishes: 0, 
+          uniqueDishes: 0,
+          places: 0, 
+          placesByType: { friends: 0, restaurants: 0, other: 0 },
+          totalDishesByMealType: { breakfast: 0, lunch: 0, dinner: 0, other: 0 },
+          uniqueDishesByMealType: { breakfast: 0, lunch: 0, dinner: 0, other: 0 }
+        };
+      }
     },
-    enabled: !!user
+    enabled: !!user,
+    staleTime: 0, // Always consider data stale to ensure fresh updates
+    refetchOnWindowFocus: true // Refetch when window regains focus
   });
 
 
@@ -220,32 +381,49 @@ const Index = () => {
         <div className="container mx-auto">
           <div className="grid grid-cols-3 gap-4">
             <Card className="p-4 text-center bg-card/60 backdrop-blur-sm">
-              <div className="text-2xl font-bold text-primary">{stats?.dinners || 0}</div>
-              <div className="text-sm text-muted-foreground">Dinners</div>
+              <div className="text-2xl font-bold text-primary">{stats?.totalDishes || 0}</div>
+              <div className="text-sm text-muted-foreground">Total Dishes</div>
             </Card>
             <Card className="p-4 text-center bg-card/60 backdrop-blur-sm">
-              <div className="text-2xl font-bold text-secondary">{stats?.places || 0}</div>
+              <div className="text-2xl font-bold text-secondary">{stats?.uniqueDishes || 0}</div>
+              <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                Unique Dishes
+                {stats?.uniqueDishesByMealType && (
+                  <HoverCard openDelay={100} closeDelay={50}>
+                    <HoverCardTrigger asChild>
+                      <Info className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-pointer" />
+                    </HoverCardTrigger>
+                    <HoverCardContent className="w-auto p-2">
+                      <div className="text-xs space-y-1">
+                        <div>Breakfast: {stats.uniqueDishesByMealType.breakfast}</div>
+                        <div>Lunch: {stats.uniqueDishesByMealType.lunch}</div>
+                        <div>Dinner: {stats.uniqueDishesByMealType.dinner}</div>
+                        <div>Other: {stats.uniqueDishesByMealType.other}</div>
+                      </div>
+                    </HoverCardContent>
+                  </HoverCard>
+                )}
+              </div>
+            </Card>
+            <Card className="p-4 text-center bg-card/60 backdrop-blur-sm">
+              <div className="text-2xl font-bold text-accent">{stats?.places || 0}</div>
               <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
                 Places
                 {stats?.placesByType && (
-                  <Popover>
-                    <PopoverTrigger asChild>
+                  <HoverCard openDelay={100} closeDelay={50}>
+                    <HoverCardTrigger asChild>
                       <Info className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-pointer" />
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-2">
+                    </HoverCardTrigger>
+                    <HoverCardContent className="w-auto p-2">
                       <div className="text-xs space-y-1">
                         <div>Friends: {stats.placesByType.friends}</div>
                         <div>Restaurants: {stats.placesByType.restaurants}</div>
                         <div>Other: {stats.placesByType.other}</div>
                       </div>
-                    </PopoverContent>
-                  </Popover>
+                    </HoverCardContent>
+                  </HoverCard>
                 )}
               </div>
-            </Card>
-            <Card className="p-4 text-center bg-card/60 backdrop-blur-sm">
-              <div className="text-2xl font-bold text-accent">{stats?.cuisines || 0}</div>
-              <div className="text-sm text-muted-foreground">Cuisines</div>
             </Card>
           </div>
         </div>
@@ -263,37 +441,68 @@ const Index = () => {
             <Button variant="filter" size="sm">Italian</Button>
           </div>
           
-          <div className="mt-4">
-            <AISearch />
+          {/* Search Bar */}
+          <div className="mt-4 relative">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search dishes, variants, or tags..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-10"
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-muted"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
           </div>
+          
         </div>
       </section>
 
       {/* Gallery */}
       <section className="px-4 pb-24">
         <div className="container mx-auto">
-          <h3 className="text-xl font-semibold mb-4 text-foreground">Recent Dinners</h3>
+          <h3 className="text-xl font-semibold mb-4 text-foreground">Your Dishes</h3>
           {isLoading ? (
             <div className="text-center py-8">
-              <div className="text-muted-foreground">Loading dinners...</div>
+              <div className="text-muted-foreground">Loading dishes...</div>
             </div>
-          ) : dinners.length === 0 ? (
+          ) : dishes.length === 0 ? (
             <div className="text-center py-12">
               <Camera className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="text-lg font-semibold mb-2">No dinners yet</h3>
+              <h3 className="text-lg font-semibold mb-2">No dishes yet</h3>
               <p className="text-muted-foreground mb-4">Start documenting your culinary journey!</p>
-              <Button onClick={() => setShowAddDinner(true)}>
+              <Button onClick={() => setShowMealTypeSelector(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Your First Dinner
+                Add Your First Dish
+              </Button>
+            </div>
+          ) : filteredDishes.length === 0 ? (
+            <div className="text-center py-12">
+              <Search className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-lg font-semibold mb-2">No dishes found</h3>
+              <p className="text-muted-foreground mb-4">Try searching for something else or clear your search.</p>
+              <Button onClick={() => setSearchQuery('')} variant="outline">
+                <X className="h-4 w-4 mr-2" />
+                Clear Search
               </Button>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {dinners.map((dinner) => (
-                <DinnerCard 
-                  key={dinner.id} 
-                  dinner={dinner} 
-                  onClick={handleDinnerClick}
+              {filteredDishes.map((dish) => (
+                <DishCard 
+                  key={dish.id} 
+                  dish={dish} 
+                  onClick={() => handleDishClick(dish)}
                 />
               ))}
             </div>
@@ -305,22 +514,32 @@ const Index = () => {
       <BottomNavigation />
 
       {/* Floating Action Button */}
-      <FloatingActionButton onClick={() => setShowAddDinner(true)} />
+      <FloatingActionButton onClick={() => setShowMealTypeSelector(true)} />
 
       {/* Modals */}
-      <DinnerDetail
-        dinner={selectedDinner}
-        open={showDetail}
-        onOpenChange={setShowDetail}
-        onEdit={handleEditDinner}
-        onDelete={refreshDinners}
+      <DishDetail
+        dish={selectedDish}
+        isOpen={showDetail}
+        onClose={() => setShowDetail(false)}
+        onEdit={handleEditInstance}
+        onEditDish={handleEditDish}
+        onRefresh={refreshDishes}
+      />
+      
+      <MealTypeSelector
+        isOpen={showMealTypeSelector}
+        onClose={() => setShowMealTypeSelector(false)}
+        onNewDish={handleNewDish}
+        onRepeatMeal={handleRepeatMeal}
       />
       
       <AddDinner
         open={showAddDinner}
         onOpenChange={handleCloseAddDinner}
         editDinner={editDinner}
-        onSave={refreshDinners}
+        repeatMealData={repeatMealData}
+        initialTitle={initialTitle}
+        onSave={refreshDishes}
       />
     </div>
   );

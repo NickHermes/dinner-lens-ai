@@ -2,14 +2,9 @@ import { useState } from 'react'
 import { Search, Sparkles, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 
 export const AISearch = () => {
   const [query, setQuery] = useState('')
-
-  const predefinedFilters = [
-    'Last 7 days', 'Home', 'Restaurants', 'Vegetarian', 'Italian', 'Healthy'
-  ]
 
   return (
     <div className="space-y-4">
@@ -32,22 +27,6 @@ export const AISearch = () => {
             <X className="h-3 w-3" />
           </Button>
         )}
-      </div>
-      
-      <div className="space-y-2">
-        <p className="text-xs text-muted-foreground">Quick searches:</p>
-        <div className="flex flex-wrap gap-2">
-          {predefinedFilters.map((filter) => (
-            <Badge
-              key={filter}
-              variant="outline"
-              className="cursor-pointer hover:bg-primary/10 hover:border-primary/50 transition-colors"
-            >
-              <Sparkles className="h-3 w-3 mr-1" />
-              {filter}
-            </Badge>
-          ))}
-        </div>
       </div>
     </div>
   )
