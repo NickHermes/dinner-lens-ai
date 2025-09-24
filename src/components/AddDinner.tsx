@@ -748,7 +748,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                       }}
                     >
                       <img 
-                        src={editDinner.photos?.[0]?.url || '/placeholder.svg'} 
+                        src={editDinner.photos?.[0]?.url || 'placeholder.svg'} 
                         alt="Current base photo" 
                         className="w-full h-24 object-cover"
                       />

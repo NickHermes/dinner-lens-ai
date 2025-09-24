@@ -53,7 +53,7 @@ export const DishCard: React.FC<DishCardProps> = ({ dish, onClick }) => {
               alt={dish.title}
               className="w-full h-48 object-cover rounded-t-lg"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = '/placeholder.svg'
+                (e.target as HTMLImageElement).src = 'placeholder.svg'
               }}
             />
           ) : (
