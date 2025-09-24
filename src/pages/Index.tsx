@@ -25,7 +25,7 @@ const mockDinners = [
     date: "2024-01-15",
     place: "Home",
     tags: ["Japanese", "Fish", "Healthy"],
-    imageUrl: "/placeholder.svg"
+    imageUrl: "placeholder.svg"
   },
   {
     id: "2", 
@@ -33,7 +33,7 @@ const mockDinners = [
     date: "2024-01-14",
     place: "Tony's Pizzeria",
     tags: ["Italian", "Vegetarian", "Pizza"],
-    imageUrl: "/placeholder.svg"
+    imageUrl: "placeholder.svg"
   },
   {
     id: "3",
@@ -41,7 +41,7 @@ const mockDinners = [
     date: "2024-01-13", 
     place: "Bangkok Street",
     tags: ["Thai", "Chicken", "Noodles"],
-    imageUrl: "/placeholder.svg"
+    imageUrl: "placeholder.svg"
   },
   {
     id: "4",
@@ -49,7 +49,7 @@ const mockDinners = [
     date: "2024-01-12",
     place: "Home",
     tags: ["Vegan", "Healthy", "Quinoa"],
-    imageUrl: "/placeholder.svg"
+    imageUrl: "placeholder.svg"
   }
 ];
 

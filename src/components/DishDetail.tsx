@@ -678,7 +678,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
                     alt={dish.title}
                     className="w-24 h-24 rounded-lg object-cover"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/placeholder.svg'
+                      (e.target as HTMLImageElement).src = 'placeholder.svg'
                     }}
                   />
                 )}
@@ -772,7 +772,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
                           alt={`${dish.title} - ${formatDate(instance.datetime)}`}
                           className="w-full h-full object-cover"
                           onError={(e) => {
-                            (e.target as HTMLImageElement).src = '/placeholder.svg'
+                            (e.target as HTMLImageElement).src = 'placeholder.svg'
                           }}
                         />
                       ) : (
@@ -860,7 +860,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
                           alt={`${dish.title} - ${formatDate(selectedInstance.datetime)}`}
                           className="w-full max-h-96 object-cover rounded-lg"
                           onError={(e) => {
-                            (e.target as HTMLImageElement).src = '/placeholder.svg'
+                            (e.target as HTMLImageElement).src = 'placeholder.svg'
                           }}
                         />
                       </div>

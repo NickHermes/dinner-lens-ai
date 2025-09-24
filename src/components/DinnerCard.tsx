@@ -42,7 +42,7 @@ export const DinnerCard = ({ dinner, onClick }: DinnerCardProps) => {
     });
   };
 
-  const imageUrl = dinner.photos?.[0]?.url || '/placeholder.svg';
+  const imageUrl = dinner.photos?.[0]?.url || 'placeholder.svg';
   
   // Extract place name from notes if it starts with a place name (for mock places)
   let placeName = dinner.places?.name || 'Unknown Place';
