@@ -2,980 +2,705 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Camera, Upload, X, MapPin, Clock, Tag, Loader2, Wand2, Trash2 } from 'lucide-react'
+import { Camera, Upload, X, Loader2, Wand2, Trash2 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
-import { supabase } from '@/lib/supabase'
+import { supabase, Dish, DinnerInstance } from '@/lib/supabase'
 import { toast } from 'sonner'
-import { getHealthScoreBadgeVariant, getHealthScoreBadgeClass } from '@/lib/utils'
-import { processFileAndExtractExif, extractExifData, convertHeicForPreview } from '@/lib/exif'
+import { processFileAndExtractExif, extractExifData } from '@/lib/exif'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Slider } from '@/components/ui/slider'
+import { LocationInput } from '@/components/LocationInput'
 
-interface NewPlaceFormProps {
-  onSave: (place: Place, isDefault: boolean) => void
-  onCancel: () => void
+interface PreviousDish {
+  dish: Dish
+  frequency: number
+  last_eaten: string
+  sample_photo_url?: string
+  places?: string[]
+  latest_instance?: DinnerInstance
+  selected_variant?: DinnerInstance
+  action_type?: 'log_again' | 'new_variant'
 }
 
-const NewPlaceForm = ({ onSave, onCancel }: NewPlaceFormProps) => {
-  const [placeName, setPlaceName] = useState('')
-  const [placeType, setPlaceType] = useState<'friend' | 'restaurant' | 'other'>('friend')
-  const [isDefault, setIsDefault] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const { user } = useAuth()
-
-  const handleSave = async () => {
-    if (!placeName.trim() || !user) return
-
-    try {
-      setIsSaving(true)
-
-      // Create new place in database
-      const { data, error } = await supabase
-        .from('places')
-        .insert({
-          user_id: user.id,
-          name: placeName.trim(),
-          type: placeType,
-          lat: 0, // Default coordinates - user can update later
-          lon: 0,
-          radius_m: 150
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-
-      const newPlace: Place = {
-        id: data.id,
-        name: data.name,
-        type: data.type,
-        lat: data.lat,
-        lon: data.lon,
-        radius_m: data.radius_m
-      }
-
-      onSave(newPlace, isDefault)
-      toast.success('Place added successfully')
-
-    } catch (error) {
-      console.error('Save place error:', error)
-      toast.error('Failed to save place')
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="place-name">Place Name</Label>
-        <Input
-          id="place-name"
-          value={placeName}
-          onChange={(e) => setPlaceName(e.target.value)}
-          placeholder="e.g., Anna's House, Pizza Palace"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="place-type">Type</Label>
-        <Select value={placeType} onValueChange={(value: any) => setPlaceType(value)}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="friend">Friend's Place</SelectItem>
-            <SelectItem value="restaurant">Restaurant</SelectItem>
-            <SelectItem value="other">Other</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex items-center space-x-2">
-        <Checkbox
-          id="is-default"
-          checked={isDefault}
-          onCheckedChange={(checked) => setIsDefault(!!checked)}
-        />
-        <Label htmlFor="is-default" className="text-sm">
-          Add as default place
-        </Label>
-      </div>
-
-      <div className="flex gap-2 justify-end">
-        <Button variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button 
-          onClick={handleSave} 
-          disabled={!placeName.trim() || isSaving}
-        >
-          {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Add Place
-        </Button>
-      </div>
-    </div>
-  )
+interface AddDinnerProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  editDinner?: any // When editing an existing dinner/instance
+  repeatMealData?: PreviousDish // When logging a previous meal
+  initialTitle?: string // Pre-fill title from search
+  onSave?: () => void
 }
 
 interface Tag {
   name: string
   type: 'ingredient' | 'cuisine' | 'dish' | 'diet' | 'method' | 'course' | 'custom'
   source: 'ai' | 'user'
+  is_base_tag: boolean
 }
 
-interface Place {
-  id: string
-  name: string
-  type: 'home' | 'friend' | 'restaurant' | 'other'
-  lat: number
-  lon: number
-  radius_m: number
-}
-
-interface AddDinnerProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  editDinner?: {
-      id: string
-  title: string
-  datetime: string
-  place_id?: string
-  notes: string
-  meal_type: 'breakfast' | 'lunch' | 'dinner' | 'other'
-  deliciousness?: number
-  effort?: 'easy' | 'medium' | 'hard'
-  health_score?: number
-  photos: { url: string }[]
-  tags: { name: string; type: string; source: string; approved: boolean }[]
-  places?: { id: string; name: string; type: string; lat: number; lon: number; radius_m: number }
-  }
-  onSave?: () => void
-}
-
-export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDinner, onSave }) => {
+export const AddDinner: React.FC<AddDinnerProps> = ({ 
+  open, 
+  onOpenChange, 
+  editDinner,
+  repeatMealData, 
+  initialTitle,
+  onSave 
+}) => {
   const { user } = useAuth()
   const fileInputRef = useRef<HTMLInputElement>(null)
   
+  // Form state
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [title, setTitle] = useState('')
+  const [variantTitle, setVariantTitle] = useState('')
+  const [location, setLocation] = useState('')
   const [notes, setNotes] = useState('')
-  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null)
-  const [dinnerDate, setDinnerDate] = useState<string>(new Date().toISOString().slice(0, 10) + 'T12:00')
+  const [dinnerDate, setDinnerDate] = useState('')
   const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'other'>('dinner')
+  const [effort, setEffort] = useState<'easy' | 'medium' | 'hard' | null>(null)
+  const [healthScore, setHealthScore] = useState<number | null>(null)
   const [tags, setTags] = useState<Tag[]>([])
   const [newTagInput, setNewTagInput] = useState('')
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  
+  // UI state
   const [isSaving, setIsSaving] = useState(false)
-  const [showValidationErrors, setShowValidationErrors] = useState(false)
-  const [healthScore, setHealthScore] = useState<number | null>(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [hasUploadedPhoto, setHasUploadedPhoto] = useState(false)
-  const [deliciousness, setDeliciousness] = useState<number | null>(null)
-  const [effort, setEffort] = useState<'easy' | 'medium' | 'hard' | null>(null)
+  const [showValidationErrors, setShowValidationErrors] = useState(false)
   const [currentLocation, setCurrentLocation] = useState<{latitude: number, longitude: number} | null>(null)
 
-  // Default places - Home is always available
-  const defaultPlaces: Place[] = [
-    { id: '550e8400-e29b-41d4-a716-446655440001', name: 'Home', type: 'home', lat: 37.7749, lon: -122.4194, radius_m: 150 },
-  ]
-  
-  // User's custom places (will be fetched from database)
-  const [userPlaces, setUserPlaces] = useState<Place[]>([])
-  // Track which places should be presets (since we don't have is_default column)
-  const [presetPlaceIds, setPresetPlaceIds] = useState<Set<string>>(new Set())
-  const [showNewPlaceModal, setShowNewPlaceModal] = useState(false)
-  const [deletingPlaceId, setDeletingPlaceId] = useState<string | null>(null)
-  
-  // Combine default and user places (presets only)
-  const allPlaces = [...defaultPlaces, ...userPlaces]
-
-  // Reset form when dialog opens for new dinner (not when editing)
+  // Initialize form based on mode
   useEffect(() => {
-    if (open && editDinner === null) {
-      // Only reset if we're not in the middle of editing
-      resetForm()
-    }
-  }, [open, editDinner])
-
-  // Populate form when editing
-  useEffect(() => {
-    if (editDinner) {
-      setTitle(editDinner.title)
-      // Extract actual notes (remove place name prefix if present)
-      let actualNotes = editDinner.notes || '';
-      if (actualNotes) {
-        const notesParts = actualNotes.split(' | ');
-        actualNotes = notesParts.length > 1 ? notesParts.slice(1).join(' | ') : 
-                     (notesParts[0] && notesParts[0].includes(' ') ? notesParts[0] : '');
-      }
-      setNotes(actualNotes)
-      setDinnerDate(editDinner.datetime.slice(0, 16))
-      
-      // Set health score
-      setHealthScore(editDinner.health_score || null)
-      
-      // Set existing photo
-      if (editDinner.photos.length > 0) {
-        setPreviewUrl(editDinner.photos[0].url)
-        setHasUploadedPhoto(true)
-      }
-      
-      // Set meal type
-      setMealType(editDinner.meal_type || 'dinner')
-      
-      // Set deliciousness and effort
-      setDeliciousness(editDinner.deliciousness || null)
-      setEffort(editDinner.effort || null)
-      
-      // Set tags
-      const existingTags: Tag[] = editDinner.tags.map(tag => ({
-        name: tag.name,
-        type: tag.type as any,
-        source: tag.source as any
-      }))
-      setTags(existingTags)
-    } else {
-      // Reset form for new dinner
-      resetForm()
-    }
-  }, [editDinner])
-
-  // Set place selection when editing (only when editDinner changes)
-  useEffect(() => {
-    const setPlaceSelection = async () => {
-
-      if (editDinner && allPlaces.length > 0) {
-        // Set place - check if it's a mock place stored in notes or a real place
-        let selectedPlace = null;
-        
-        // First check if we have a places object from the database join
-        if (editDinner.places) {
-          // Use the places object directly
-          selectedPlace = {
-            id: editDinner.places.id || `temp-${editDinner.places.name}`,
-            name: editDinner.places.name,
-            type: editDinner.places.type,
-            lat: editDinner.places.lat || 0,
-            lon: editDinner.places.lon || 0,
-            radius_m: editDinner.places.radius_m || 150
-          };
-        }
-        // Fallback: check if it's a real place by place_id
-        else if (editDinner.place_id) {
-          console.log('Debug - Looking for place_id:', editDinner.place_id)
-          console.log('Debug - allPlaces:', allPlaces.map(p => ({ id: p.id, name: p.name })))
-          selectedPlace = allPlaces.find(p => p.id === editDinner.place_id);
-          console.log('Debug - Found in allPlaces:', selectedPlace)
-          
-          // If not found in allPlaces, fetch it from the database
-          // This handles both preset and non-preset places
-          if (!selectedPlace && user) {
-            try {
-              const { data: placeData, error } = await supabase
-                .from('places')
-                .select('*')
-                .eq('id', editDinner.place_id)
-                .eq('user_id', user.id)
-                .single()
-              
-              if (!error && placeData) {
-                console.log('Debug - Found place in database:', placeData)
-                // Use the actual place data (not a temp object) so it can be properly selected
-                selectedPlace = {
-                  id: placeData.id, // Use the real ID, not temp
-                  name: placeData.name,
-                  type: placeData.type,
-                  lat: placeData.lat,
-                  lon: placeData.lon,
-                  radius_m: placeData.radius_m
-                };
-                console.log('Debug - Created place object:', selectedPlace)
-              }
-            } catch (error) {
-              console.error('Error fetching place:', error)
-            }
-          }
-        }
-        
-        // If no real place found, check if it's a mock place stored in notes
-        if (!selectedPlace && editDinner.notes) {
-          const notesParts = editDinner.notes.split(' | ');
-          if (notesParts.length > 0) {
-            const firstPart = notesParts[0].trim();
-            if (firstPart && !firstPart.includes(' ') && firstPart.length < 50) {
-              // This looks like a place name, find it in all places
-              selectedPlace = allPlaces.find(p => p.name === firstPart);
-              
-              // If not found in allPlaces, create a temporary place object
-              if (!selectedPlace) {
-                selectedPlace = {
-                  id: `temp-${firstPart}`,
-                  name: firstPart,
-                  type: 'other' as const,
-                  lat: 0,
-                  lon: 0,
-                  radius_m: 150
-                };
-              }
-            }
-          }
-        }
-        
-        setSelectedPlace(selectedPlace);
-      }
-    }
-    
-    setPlaceSelection()
-  }, [editDinner, user]) // Added user dependency for database fetch
-
-  // Initialize preset place IDs on component mount
-  useEffect(() => {
-    const initializePresetPlaces = async () => {
-      if (!user) return
-
-      try {
-        const { data, error } = await supabase
-          .from('places')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('name')
-
-        if (error) throw error
-        
-        // Start with empty preset list - only places explicitly marked as presets will be included
-        // The "Home" default place is always a preset
-        const initialPresetIds = new Set(['550e8400-e29b-41d4-a716-446655440001']) // Home is always a preset
-        setPresetPlaceIds(initialPresetIds)
-      } catch (error) {
-        console.error('Error initializing preset places:', error)
-      }
-    }
-
-    initializePresetPlaces()
-  }, [user])
-
-  // Fetch user places when preset place IDs change
-  useEffect(() => {
-    const fetchUserPlaces = async () => {
-      if (!user) return
-
-      try {
-        const { data, error } = await supabase
-          .from('places')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('name')
-
-        if (error) throw error
-        
-        // Filter to only include places that are marked as presets
-        const presetPlaces = data?.filter(place => presetPlaceIds.has(place.id)) || []
-        setUserPlaces(presetPlaces)
-        
-
-      } catch (error) {
-        console.error('Error fetching user places:', error)
-      }
-    }
-
-    fetchUserPlaces()
-  }, [user, presetPlaceIds])
-
-
-
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      console.log('🔍 File selected from mobile:', {
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        lastModified: new Date(file.lastModified).toISOString()
-      })
-      
-      try {
-        // Process file for preview and upload
-        console.log('📂 Processing file:', file.name)
-        const processed = await processFileAndExtractExif(file)
-        console.log('✅ File processing completed:', processed)
-        setSelectedFile(processed.file)
-        
-        // Handle HEIC files differently
-        const isHEIC = file.type === 'image/heic' || file.type === 'image/heif' || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')
-        
-        if (isHEIC) {
-          // Try to convert HEIC for preview
-          try {
-            console.log('Attempting HEIC preview conversion...')
-            const convertedFile = await convertHeicForPreview(file)
-            
-            if (convertedFile) {
-              // Conversion successful - show real preview
-              const url = URL.createObjectURL(convertedFile)
-              setPreviewUrl(url)
-              console.log('HEIC preview conversion successful')
-            } else {
-              // Conversion failed - use placeholder
-              setPreviewUrl('heic-placeholder')
-              console.log('HEIC preview conversion failed - using placeholder')
-            }
-          } catch (error) {
-            // Conversion error - use placeholder
-            console.warn('HEIC preview conversion error:', error)
-            setPreviewUrl('heic-placeholder')
-          }
-        } else {
-          // For other formats, create normal preview
-          const url = URL.createObjectURL(processed.file)
-          setPreviewUrl(url)
-          console.log('Regular image file processed:', {
-            type: processed.file.type,
-            name: processed.file.name,
-            size: processed.file.size,
-            previewUrl: url
-          })
-        }
-        
-        setHasUploadedPhoto(true) // Show attributes as soon as photo is selected
-        
-        // Try to get current location since EXIF GPS data is stripped by mobile browsers
-        if (navigator.geolocation) {
-          console.log('📍 Requesting current location...')
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              console.log('✅ Current location obtained:', {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy
-              })
-              // Store location for use during save
-              setCurrentLocation({
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude
-              })
-            },
-            (error) => {
-              console.log('📍 Location not available (HTTPS required or permission denied) - using manual selection')
-              // User denied location or it's not available - that's okay
-            },
-            { timeout: 10000, enableHighAccuracy: true }
-          )
-        }
-        
-        console.log('File processed for upload:', {
-          originalType: file.type,
-          originalName: file.name,
-          originalSize: file.size,
-          processedType: processed.file.type,
-          processedName: processed.file.name,
-          processedSize: processed.file.size,
-          exifData: processed.exifData,
-          isHEIC: isHEIC
-        })
-      } catch (error) {
-        console.error('❌ Error processing file:', error)
-        // Fallback to original file if conversion fails
-        setSelectedFile(file)
-        const url = URL.createObjectURL(file)
-        setPreviewUrl(url)
-        setHasUploadedPhoto(true)
-        toast.error('File processed with limited features (EXIF data may not be available)')
-      }
-      
-      // Reset AI analysis state
-      setHealthScore(null)
-    }
-  }
-
-  const handleCameraCapture = () => {
-    fileInputRef.current?.click()
-  }
-
-  const analyzeImage = async () => {
-    if (!user || !previewUrl) return
-    
-    setIsAnalyzing(true)
-    
-    try {
-      let publicUrl = previewUrl
-      
-      // If we have a new file to upload, upload it first
-      if (selectedFile) {
-        let fileToUpload = selectedFile
-        
-        // Convert HEIC to JPEG for AI analysis if needed
-        const isHEIC = selectedFile.type === 'image/heic' || selectedFile.type === 'image/heif' || selectedFile.name.toLowerCase().endsWith('.heic') || selectedFile.name.toLowerCase().endsWith('.heif')
-        
-        if (isHEIC) {
-          // Try to convert HEIC for AI analysis
-          try {
-            console.log('Converting HEIC for AI analysis...')
-            const convertedFile = await convertHeicForPreview(selectedFile)
-            
-            if (convertedFile) {
-              console.log('Using converted HEIC file for AI analysis')
-              fileToUpload = convertedFile
-            } else {
-              console.log('HEIC conversion failed - skipping AI analysis')
-              toast.error('AI analysis not available for this HEIC file. Conversion failed.')
-              setIsAnalyzing(false)
-              return
-            }
-          } catch (error) {
-            console.error('HEIC conversion error for AI analysis:', error)
-            toast.error('AI analysis not available for HEIC files. Conversion failed.')
-            setIsAnalyzing(false)
-            return
-          }
-        }
-        
-        const fileExt = fileToUpload.name.split('.').pop()
-        const fileName = `${user.id}/${Date.now()}.${fileExt}`
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('dinner-photos')
-          .upload(fileName, fileToUpload)
-        
-        if (uploadError) throw uploadError
-        
-        // Get public URL for the new upload
-        const { data: { publicUrl: newPublicUrl } } = supabase.storage
-          .from('dinner-photos')
-          .getPublicUrl(fileName)
-        
-        publicUrl = newPublicUrl
-      }
-      
-      // Use real AI vision analysis
-      const { data, error } = await supabase.functions.invoke('ai-vision-analysis', {
-        body: {
-          imageUrl: publicUrl,
-          userId: user.id
-        }
-      })
-      
-      if (error) throw error
-      
-      // Show AI analysis result
-      console.log('AI Vision Analysis Result:', data)
-      
-      // Convert AI suggestions to tags
-      const aiTags: Tag[] = data.suggested_tags?.map((tag: any) => ({
-        name: typeof tag === 'string' ? tag : tag.name,
-        type: (typeof tag === 'object' && tag.type) ? tag.type : 'custom' as const,
-        source: 'ai' as const
-      })) || []
-      
-      // Clear existing AI tags and add new ones (keep user-created tags)
-      setTags(prevTags => {
-        const userTags = prevTags.filter(tag => tag.source === 'user')
-        return [...userTags, ...aiTags]
-      })
-      setTitle(data.suggested_title || 'AI Generated Title')
-      setHealthScore(data.health_score || null)
-      
-      toast.success('AI analysis complete! Review and adjust the suggestions.')
-      
-    } catch (error: any) {
-      console.error('AI analysis failed:', error)
-      console.error('Error details:', {
-        message: error.message,
-        response: error.response,
-        status: error.status
-      })
-      toast.error(`AI analysis failed: ${error.message}. You can still save your dinner manually.`)
-    } finally {
-      setIsAnalyzing(false)
-    }
-  }
-
-
-
-
-
-  const addTag = (tagName: string) => {
-    if (tagName.trim() && !tags.some(tag => tag.name.toLowerCase() === tagName.toLowerCase())) {
-      setTags(prev => [...prev, {
-        name: tagName.trim(),
-        type: 'custom',
-        source: 'user'
-      }])
-      setNewTagInput('')
-    }
-  }
-
-  const removeTag = (tagName: string) => {
-    setTags(prev => prev.filter(tag => tag.name !== tagName))
-  }
-
-  const handleTagInputKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      addTag(newTagInput)
-    }
-  }
-
-  const handleDelete = async () => {
-    if (!editDinner || !user) return
-
-    try {
-      setIsSaving(true)
-
-      // Delete photos from storage first
-      const { data: photos } = await supabase
-        .from('photos')
-        .select('url')
-        .eq('dinner_id', editDinner.id)
-
-      if (photos && photos.length > 0) {
-        const photoPaths = photos.map(photo => photo.url.split('/').pop())
-        const { error: deletePhotosError } = await supabase.storage
-          .from('dinner-photos')
-          .remove(photoPaths)
-
-        if (deletePhotosError) {
-          console.error('Error deleting photos:', deletePhotosError)
-        }
-      }
-
-      // Delete the dinner (this will cascade delete tags and photos due to foreign key constraints)
-      const { error: deleteError } = await supabase
-        .from('dinners')
-        .delete()
-        .eq('id', editDinner.id)
-        .eq('user_id', user.id)
-
-      if (deleteError) throw deleteError
-
-      toast.success('Dinner deleted successfully!')
-      onSave?.() // Refresh the gallery data
-      onOpenChange(false)
-      resetForm()
-
-    } catch (error: any) {
-      console.error('Delete failed:', error)
-      toast.error(`Failed to delete dinner: ${error.message}`)
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleDeletePlace = async (place: Place) => {
-    if (!user) return
-
-    try {
-      // Remove from preset place IDs set
-      setPresetPlaceIds(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(place.id)
-        return newSet
-      })
-      
-      // Clear selection if this place was selected
-      if (selectedPlace?.id === place.id) {
-        setSelectedPlace(null)
-      }
-
-      // Clear deleting state
-      setDeletingPlaceId(null)
-
-      toast.success(`"${place.name}" removed from preset places. Existing dinners will still show this location.`)
-
-    } catch (error) {
-      console.error('Remove place from presets error:', error)
-      toast.error('Failed to remove place from presets')
-      // Clear deleting state even on error
-      setDeletingPlaceId(null)
-    }
-  }
-
-
-
-  const handleSave = async () => {
-    if (!user) return
-    
-    // Validate required fields
-    if (!title.trim() || !selectedPlace) {
-      setShowValidationErrors(true)
-      if (!title.trim()) {
-        toast.error('Please enter a title for your dinner')
-      }
-      if (!selectedPlace) {
-        toast.error('Please select a location for your dinner')
-      }
-      setIsSaving(false)
-      return
-    }
-    
-    // Clear validation errors if validation passes
-    setShowValidationErrors(false)
-    
-    // For new dinners, require a file
-    if (!editDinner && !selectedFile) return
-    
-    setIsSaving(true)
-    
-    try {
-      let publicUrl = previewUrl
-      
-      // Upload new image if provided
-      if (selectedFile) {
-        let fileToUpload = selectedFile
-        
-        // Convert HEIC to JPEG for upload if needed
-        const isHEIC = selectedFile.type === 'image/heic' || selectedFile.type === 'image/heif' || selectedFile.name.toLowerCase().endsWith('.heic') || selectedFile.name.toLowerCase().endsWith('.heif')
-        
-        if (isHEIC) {
-          // Convert HEIC to JPEG for upload so browsers can display it
-          console.log('HEIC file detected - converting to JPEG for upload')
-          try {
-            const convertedFile = await convertHeicForPreview(selectedFile)
-            if (convertedFile) {
-              fileToUpload = convertedFile
-              console.log('HEIC converted to JPEG for upload:', {
-                originalSize: selectedFile.size,
-                convertedSize: convertedFile.size
-              })
-            } else {
-              throw new Error('HEIC conversion failed')
-            }
-          } catch (error) {
-            console.error('HEIC conversion failed:', error)
-            throw new Error('Unable to upload HEIC file. Please try with a JPEG or PNG image.')
-          }
-        }
-        
-        const fileExt = isHEIC ? 'jpg' : fileToUpload.name.split('.').pop()
-        const fileName = `${user.id}/${Date.now()}.${fileExt}`
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('dinner-photos')
-          .upload(fileName, fileToUpload)
-        
-        if (uploadError) throw uploadError
-        
-        const { data: { publicUrl: newPublicUrl } } = supabase.storage
-          .from('dinner-photos')
-          .getPublicUrl(fileName)
-        
-        publicUrl = newPublicUrl
-      }
-      
-      let dinnerData
-      
+    if (open) {
       if (editDinner) {
-        // Update existing dinner
-        console.log('Updating dinner with place_id:', selectedPlace?.id)
-        // Save place_id if it's a real place (not the default Home mock place or temporary place)
-        const placeId = selectedPlace?.id && 
-                       selectedPlace.id !== '550e8400-e29b-41d4-a716-446655440001' && 
-                       !selectedPlace.id.startsWith('temp-') ? selectedPlace.id : null
-        // Store place name in notes if it's the Home mock place or a temporary place
-        const placeName = (selectedPlace?.id === '550e8400-e29b-41d4-a716-446655440001' || 
-                          selectedPlace?.id?.startsWith('temp-')) ? selectedPlace.name : null
-        const combinedNotes = placeName ? `${placeName}${notes ? ` | ${notes}` : ''}` : notes
-        const { data, error: dinnerError } = await supabase
-          .from('dinners')
-          .update({
-            title: title || 'Untitled Dinner',
-            datetime: new Date(dinnerDate).toISOString(),
-            place_id: placeId,
-            notes: combinedNotes,
-            meal_type: mealType,
-            deliciousness: deliciousness,
-            effort: effort,
-            health_score: healthScore,
-          })
-          .eq('id', editDinner.id)
-          .select()
-          .single()
+        // Edit existing dinner/instance
+        setTitle(editDinner.title || '')
+        setVariantTitle(editDinner.variant_title || '')
+        setHealthScore(editDinner.health_score || null)
+        setEffort(editDinner.effort || null)
+        setMealType(editDinner.meal_type || 'dinner')
+        setDinnerDate(editDinner.datetime || new Date().toISOString().slice(0, 16))
+        setLocation(editDinner.location || '')
+        setNotes(editDinner.notes || '')
+        setTags(editDinner.tags || [])
         
-        if (dinnerError) throw dinnerError
-        dinnerData = data
-        console.log('Dinner data:', dinnerData)
+        // Handle photo
+        if (editDinner.photos && editDinner.photos.length > 0) {
+          setPreviewUrl(editDinner.photos[0].url)
+          setHasUploadedPhoto(true)
+        }
         
-        // Update photo if new one was uploaded
-        if (selectedFile && publicUrl) {
-          let exifData: any = { width: 0, height: 0 }
-          
-          // Extract EXIF data from the selected file
-          try {
-            const fileForExif = selectedFile
-            exifData = await extractExifData(fileForExif)
-            console.log('Extracted EXIF data for update:', exifData)
-          } catch (error) {
-            console.warn('Failed to extract EXIF data for update:', error)
+        // Show attributes immediately for editing
+        setHasUploadedPhoto(true)
+      } else if (repeatMealData) {
+        // Pre-fill for repeat meal
+        setTitle(repeatMealData.dish.title)
+        setHealthScore(repeatMealData.dish.health_score || null)
+        setEffort(repeatMealData.dish.effort || null)
+        
+        // Handle different action types
+        if (repeatMealData.action_type === 'log_again' && repeatMealData.selected_variant) {
+          // Log Again: Only allow editing date & location
+          const variant = repeatMealData.selected_variant
+          setDinnerDate(new Date().toISOString().slice(0, 16)) // Current time
+          setLocation(variant.location || '') // Pre-fill location from existing variant
+          setNotes(variant.notes || '') // Pre-fill notes from existing variant
+          setVariantTitle(variant.variant_title || '') // Pre-fill variant title
+          setMealType(repeatMealData.dish.meal_type) // Dish-level meal type
+          // Keep existing photo
+          if (variant.photo_url) {
+            setPreviewUrl(variant.photo_url)
+            setHasUploadedPhoto(true)
           }
-          
-          const { error: photoError } = await supabase
-            .from('photos')
-            .update({
-              url: publicUrl,
-              width: exifData.width || 0,
-              height: exifData.height || 0,
-              exif_lat: exifData.latitude || currentLocation?.latitude || null,
-              exif_lon: exifData.longitude || currentLocation?.longitude || null,
-              exif_time: exifData.timestamp || null
-            })
-            .eq('dinner_id', editDinner.id)
-          
-          if (photoError) throw photoError
+        } else if (repeatMealData.selected_variant) {
+          // Create New Variant: Pre-fill but allow photo upload
+          const variant = repeatMealData.selected_variant
+          setDinnerDate(new Date().toISOString().slice(0, 16))
+          setLocation('') // Start fresh for location
+          setNotes('') // Start fresh for notes
+          setMealType(repeatMealData.dish.meal_type)
+          // Don't pre-fill photo for new variants
+        } else {
+          // New variant of existing dish
+          setDinnerDate(new Date().toISOString().slice(0, 16))
+          setLocation('')
+          setNotes('')
+          setMealType(repeatMealData.dish.meal_type)
+        }
+        
+        setTags([]) // Start fresh - user can add instance-specific tags
+        if (!repeatMealData.selected_variant || repeatMealData.action_type !== 'log_again') {
+          setHasUploadedPhoto(true) // Show attributes immediately for new variants
         }
       } else {
-        // Create new dinner
-        console.log('Creating dinner with place_id:', selectedPlace?.id)
-        // Save place_id if it's a real place (not the default Home mock place or temporary place)
-        const placeId = selectedPlace?.id && 
-                       selectedPlace.id !== '550e8400-e29b-41d4-a716-446655440001' && 
-                       !selectedPlace.id.startsWith('temp-') ? selectedPlace.id : null
-        // Store place name in notes if it's the Home mock place or a temporary place
-        const placeName = (selectedPlace?.id === '550e8400-e29b-41d4-a716-446655440001' || 
-                          selectedPlace?.id?.startsWith('temp-')) ? selectedPlace.name : null
-        const combinedNotes = placeName ? `${placeName}${notes ? ` | ${notes}` : ''}` : notes
-        const { data, error: dinnerError } = await supabase
-          .from('dinners')
-          .insert({
-            user_id: user.id,
-            title: title || 'Untitled Dinner',
-            datetime: new Date(dinnerDate).toISOString(),
-            place_id: placeId,
-            notes: combinedNotes,
-            meal_type: mealType,
-            deliciousness: deliciousness,
-            effort: effort,
-            health_score: healthScore,
-            favorite: false
-          })
-          .select()
-          .single()
-        
-        if (dinnerError) throw dinnerError
-        dinnerData = data
-        console.log('Dinner data:', dinnerData)
-        
-        // Save photo to photos table with EXIF data
-        if (publicUrl) {
-          let exifData: any = { width: 0, height: 0 }
-          
-          // Extract EXIF data from the converted file if we have a new file
-          if (selectedFile) {
-            try {
-              const fileForExif = selectedFile
-              exifData = await extractExifData(fileForExif)
-              console.log('Extracted EXIF data:', exifData)
-            } catch (error) {
-              console.warn('Failed to extract EXIF data:', error)
-            }
-          }
-          
-          const { error: photoError } = await supabase
-            .from('photos')
-            .insert({
-              dinner_id: dinnerData.id,
-              url: publicUrl,
-              width: exifData.width || 0,
-              height: exifData.height || 0,
-              exif_lat: exifData.latitude || currentLocation?.latitude || null,
-              exif_lon: exifData.longitude || currentLocation?.longitude || null,
-              exif_time: exifData.timestamp || null
-            })
-          
-          if (photoError) throw photoError
+        // Reset for new dish
+        resetForm()
+        // Pre-fill title if provided from search
+        if (initialTitle) {
+          setTitle(initialTitle)
         }
       }
-      
-      // Handle tags
-      if (editDinner) {
-        // Delete existing tags and insert new ones
-        const { error: deleteTagsError } = await supabase
-          .from('tags')
-          .delete()
-          .eq('dinner_id', editDinner.id)
-        
-        if (deleteTagsError) throw deleteTagsError
-      }
-      
-      // Save all tags
-      const validTagTypes = ['ingredient', 'cuisine', 'dish', 'diet', 'method', 'course', 'custom']
-      
-      const allTags = tags.map(tag => ({
-        dinner_id: dinnerData.id,
-        name: tag.name,
-        type: validTagTypes.includes(tag.type) ? tag.type : 'custom',
-        source: tag.source || 'user',
-        approved: true
-      }))
-      
-      if (allTags.length > 0) {
-        // Validate all tags have required fields
-        const validTags = allTags.filter(tag => {
-          const isValid = tag.dinner_id && tag.name && tag.type && tag.source && tag.approved !== undefined
-          if (!isValid) {
-            console.warn('Invalid tag filtered out:', tag)
-          }
-          return isValid
-        })
-        
-        console.log('Inserting tags:', validTags)
-        
-        if (validTags.length > 0) {
-          const { error: tagsError } = await supabase
-            .from('tags')
-            .insert(validTags)
-          
-          if (tagsError) {
-            console.error('Tags insertion error:', tagsError)
-            throw tagsError
-          }
-        }
-      }
-      
-      toast.success('Dinner saved successfully!')
-      onSave?.() // Refresh the gallery data
-      onOpenChange(false)
-      resetForm()
-      
-    } catch (error: any) {
-      console.error('Save failed:', error)
-      console.error('Error details:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      })
-      toast.error(`Failed to save dinner: ${error.message}`)
-    } finally {
-      setIsSaving(false)
     }
-  }
+  }, [open, editDinner, repeatMealData, initialTitle])
 
   const resetForm = () => {
     setSelectedFile(null)
     setPreviewUrl(null)
     setTitle('')
+    setVariantTitle('')
+    setLocation('')
     setNotes('')
-    setSelectedPlace(null)
-    setDinnerDate(new Date().toISOString().slice(0, 10) + 'T12:00')
+    setDinnerDate(new Date().toISOString().slice(0, 16))
     setMealType('dinner')
+    setEffort(null)
+    setHealthScore(null)
     setTags([])
     setNewTagInput('')
-    setHealthScore(null)
-    setDeliciousness(null)
-    setEffort(null)
     setHasUploadedPhoto(false)
-    setIsAnalyzing(false)
-    setIsSaving(false)
     setShowValidationErrors(false)
+    setCurrentLocation(null)
+  }
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    console.log('File selected:', { 
+      name: file.name, 
+      type: file.type, 
+      size: file.size 
+    })
+
+    setSelectedFile(file)
+    setHasUploadedPhoto(true)
+
+    // Get current location
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCurrentLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          })
+          console.log('Location obtained:', position.coords)
+        },
+        (error) => {
+          console.log('Geolocation failed (will use manual input):', error.message)
+          setCurrentLocation(null)
+        }
+      )
+    }
+
+    try {
+      const result = await processFileAndExtractExif(file)
+      setPreviewUrl(URL.createObjectURL(file))
+      console.log('File processed for preview:', result.exifData)
+    } catch (error) {
+      console.error('Error processing file:', error)
+      toast.error('Failed to process image. Please try again.')
+    }
+  }
+
+  const analyzeImage = async () => {
+    if (!selectedFile) return
+
+    setIsAnalyzing(true)
+    try {
+      // Convert HEIC if needed
+      let fileToAnalyze = selectedFile
+      const isHEIC = selectedFile.type === 'image/heic' || selectedFile.type === 'image/heif' || 
+                     selectedFile.name.toLowerCase().endsWith('.heic') || selectedFile.name.toLowerCase().endsWith('.heif')
+      
+      if (isHEIC) {
+        const { convertHeicForPreview } = await import('@/lib/exif')
+        try {
+          const convertedFile = await convertHeicForPreview(selectedFile)
+          if (convertedFile) {
+            fileToAnalyze = convertedFile
+          }
+        } catch (error) {
+          console.error('HEIC conversion failed:', error)
+          toast.error('Cannot analyze HEIC images. Please convert to JPEG first.')
+          return
+        }
+      }
+
+      // Convert to base64
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        const base64 = e.target?.result as string
+        
+        const { data, error } = await supabase.functions.invoke('ai-vision-analysis', {
+          body: { image: base64 }
+        })
+
+        if (error) throw error
+
+        // Apply AI suggestions
+        console.log('AI response data:', data)
+        if (data.suggested_title) {
+          console.log('Setting title to:', data.suggested_title)
+          setTitle(data.suggested_title)
+        }
+        if (data.health_score) {
+          console.log('Setting health score to:', data.health_score)
+          setHealthScore(data.health_score)
+        }
+        if (data.suggested_tags) {
+          console.log('Adding tags:', data.suggested_tags)
+          const aiTags: Tag[] = data.suggested_tags.map((tag: any) => ({
+            name: tag.name.toLowerCase(),
+            type: tag.type || 'custom',
+            source: 'ai' as const,
+            is_base_tag: !repeatMealData // Base tags for new dishes, instance tags for repeats
+          }))
+          setTags(prev => [...prev, ...aiTags])
+        }
+
+        toast.success('AI analysis complete! Review and adjust the suggestions.')
+      }
+      reader.readAsDataURL(fileToAnalyze)
+    } catch (error: any) {
+      console.error('AI analysis failed:', error)
+      toast.error(`AI analysis failed: ${error.message}. You can still save manually.`)
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  const addTag = (tagName: string) => {
+    const trimmedTag = tagName.trim()
+    console.log('Adding tag:', trimmedTag)
+    console.log('Current tags:', tags)
+    console.log('Tag comparison:', tags.some(tag => tag.name.toLowerCase() === trimmedTag.toLowerCase()))
+    
+    if (trimmedTag && !tags.some(tag => tag.name.toLowerCase() === trimmedTag.toLowerCase())) {
+      setTags(prev => [...prev, {
+        name: trimmedTag.toLowerCase(),
+        type: 'custom',
+        source: 'user',
+        is_base_tag: !repeatMealData // Base tags for new dishes, instance tags for repeats
+      }])
+      setNewTagInput('')
+      console.log('Tag added successfully')
+    } else {
+      console.log('Tag not added - either empty or duplicate')
+    }
+  }
+
+  const removeTag = (index: number) => {
+    setTags(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleSave = async () => {
+    if (!user) return
+
+    // Validation
+    const isDishEdit = editDinner?.isDishEdit
+    const isVariantEdit = editDinner?.isVariantEdit
+    const isMultiCountVariant = editDinner && editDinner.count > 1
+    
+    const requireTitle = !(repeatMealData?.action_type === 'log_again')
+    if ((requireTitle && !title.trim()) || ((repeatMealData?.action_type === 'new_variant' || isVariantEdit) && !variantTitle.trim()) || (!isDishEdit && !isVariantEdit && !isMultiCountVariant && !location.trim())) {
+      setShowValidationErrors(true)
+      if (requireTitle && !title.trim()) {
+        toast.error('Please enter a title')
+      }
+      if ((repeatMealData?.action_type === 'new_variant' || isVariantEdit) && !variantTitle.trim()) {
+        toast.error('Please enter a variant title')
+      }
+      if (!isDishEdit && !isVariantEdit && !isMultiCountVariant && !location.trim()) {
+        toast.error('Please enter a location')
+      }
+      return
+    }
+
+    // For brand new dishes (not repeats or edits), require a photo
+    if (!repeatMealData && !editDinner && !selectedFile) {
+      toast.error('Please upload a photo for new dishes')
+      return
+    }
+
+    // For dish editing, require a photo selection (either current or variant photo)
+    if (isDishEdit && !previewUrl) {
+      toast.error('Please select a photo for the dish')
+      return
+    }
+
+    setIsSaving(true)
+
+    try {
+      let photoUrl = null
+
+      // Upload photo if provided
+      if (selectedFile) {
+        let fileToUpload = selectedFile
+
+        // Convert HEIC to JPEG for storage
+        const isHEIC = selectedFile.type === 'image/heic' || selectedFile.type === 'image/heif' || 
+                       selectedFile.name.toLowerCase().endsWith('.heic') || selectedFile.name.toLowerCase().endsWith('.heif')
+        
+        if (isHEIC) {
+          const { convertHeicForPreview } = await import('@/lib/exif')
+          try {
+            const convertedFile = await convertHeicForPreview(selectedFile)
+            if (convertedFile) {
+              fileToUpload = convertedFile
+            }
+          } catch (error) {
+            console.warn('HEIC conversion failed, uploading original:', error)
+          }
+        }
+
+        const fileName = `${user.id}/${Date.now()}-${fileToUpload.name}`
+        const { error: uploadError } = await supabase.storage
+          .from('dinner-photos')
+          .upload(fileName, fileToUpload)
+
+        if (uploadError) throw uploadError
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('dinner-photos')
+          .getPublicUrl(fileName)
+
+        photoUrl = publicUrl
+      }
+
+      // Handle variant-level editing
+      if (editDinner?.isVariantEdit) {
+        // Update variant-level properties only
+        const { error: variantUpdateError } = await supabase
+          .from('dinner_instances')
+          .update({
+            variant_title: variantTitle, // Variant title
+            notes: notes, // Variant notes
+            photo_url: photoUrl || editDinner.photos?.[0]?.url, // Variant image
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editDinner.id)
+          .eq('user_id', user.id)
+
+        if (variantUpdateError) throw variantUpdateError
+
+        // Update variant tags
+        if (tags.length > 0) {
+          // Delete existing variant tags
+          await supabase
+            .from('tags')
+            .delete()
+            .eq('instance_id', editDinner.id)
+            .eq('is_base_tag', false)
+
+          // Insert new variant tags
+          const { error: tagsError } = await supabase
+            .from('tags')
+            .insert(
+              tags.map(tag => ({
+                instance_id: editDinner.id,
+                name: tag.name.toLowerCase(),
+                type: tag.type,
+                source: tag.source,
+                is_base_tag: false,
+                approved: true
+              }))
+            )
+
+          if (tagsError) throw tagsError
+        }
+
+        toast.success('Variant updated successfully!')
+        onSave?.()
+        onOpenChange(false)
+        return
+      }
+
+      // Handle dish-level editing
+      if (editDinner?.isDishEdit) {
+        // Use selected photo URL (either uploaded or selected from variants)
+        const selectedPhotoUrl = photoUrl || previewUrl
+        
+        console.log('Updating dish with:', {
+          title: title.trim(),
+          health_score: healthScore,
+          effort: effort,
+          meal_type: mealType,
+          notes: notes,
+          base_photo_url: selectedPhotoUrl,
+          editDinnerId: editDinner.id
+        })
+        
+        // Update dish-level properties
+        const { error: dishUpdateError } = await supabase
+          .from('dishes')
+          .update({
+            title: title.trim(),
+            health_score: healthScore,
+            effort: effort,
+            meal_type: mealType,
+            notes: notes,
+            base_photo_url: selectedPhotoUrl,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editDinner.id)
+          .eq('user_id', user.id)
+
+        if (dishUpdateError) throw dishUpdateError
+
+        // Update base tags
+        if (tags.length > 0) {
+          // Delete existing base tags
+          await supabase
+            .from('tags')
+            .delete()
+            .eq('dish_id', editDinner.id)
+            .eq('is_base_tag', true)
+
+          // Insert new base tags
+          const { error: tagsError } = await supabase
+            .from('tags')
+            .insert(
+              tags.map(tag => ({
+                dish_id: editDinner.id,
+                name: tag.name.toLowerCase(),
+                type: tag.type,
+                source: tag.source,
+                is_base_tag: true,
+                approved: true
+              }))
+            )
+
+          if (tagsError) throw tagsError
+        }
+
+        toast.success('Dish updated successfully!')
+        onSave?.()
+        onOpenChange(false)
+        return
+      }
+
+      let dishData: Dish, instanceData: DinnerInstance
+
+      if (repeatMealData) {
+        dishData = repeatMealData.dish
+
+        if (repeatMealData.action_type === 'log_again' && repeatMealData.selected_variant) {
+                 // Log Again: Create a new consumption record
+          
+          const { data: newConsumptionRecord, error: consumptionError } = await supabase
+            .from('consumption_records')
+            .insert({
+              instance_id: repeatMealData.selected_variant.id,
+              user_id: user.id,
+              consumed_at: new Date(dinnerDate).toISOString(),
+              location: location.toLowerCase()
+            })
+            .select()
+            .single()
+
+          if (consumptionError) throw consumptionError
+
+          // Update the instance count and last_consumed
+          const { data: updatedInstance, error: updateError } = await supabase
+            .from('dinner_instances')
+            .update({
+              count: (repeatMealData.selected_variant.count || 1) + 1,
+              last_consumed: new Date(dinnerDate).toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', repeatMealData.selected_variant.id)
+            .eq('user_id', user.id)
+            .select()
+            .single()
+
+          if (updateError) throw updateError
+          instanceData = updatedInstance
+        } else {
+          // Create New Variant: Insert new instance
+          const { data: newInstance, error: instanceError } = await supabase
+            .from('dinner_instances')
+            .insert({
+              dish_id: dishData.id,
+              user_id: user.id,
+              datetime: new Date(dinnerDate).toISOString(),
+              location: location.toLowerCase(),
+              variant_title: variantTitle,
+              notes: notes,
+              photo_url: photoUrl,
+              count: 1,
+              last_consumed: new Date(dinnerDate).toISOString()
+            })
+            .select()
+            .single()
+
+          if (instanceError) throw instanceError
+          instanceData = newInstance
+
+                 // Create initial consumption record for the new variant
+          
+          const { error: consumptionError } = await supabase
+            .from('consumption_records')
+            .insert({
+              instance_id: newInstance.id,
+              user_id: user.id,
+              consumed_at: new Date(dinnerDate).toISOString(),
+              location: location.toLowerCase()
+            })
+
+          if (consumptionError) throw consumptionError
+        }
+
+        // Add instance-specific tags
+        if (tags.length > 0) {
+          const { error: tagsError } = await supabase
+            .from('tags')
+            .insert(
+              tags.map(tag => ({
+                instance_id: instanceData.id,
+                name: tag.name.toLowerCase(),
+                type: tag.type,
+                source: tag.source,
+                is_base_tag: false,
+                approved: true
+              }))
+            )
+
+          if (tagsError) throw tagsError
+        }
+
+        toast.success(`Logged ${dishData.title} again!`)
+      } else {
+        // Create new dish + first instance
+        const { data: newDish, error: dishError } = await supabase
+          .from('dishes')
+          .insert({
+            user_id: user.id,
+            title: title || 'Untitled Dish',
+            base_photo_url: photoUrl,
+            health_score: healthScore,
+            effort: effort,
+            meal_type: mealType
+          })
+          .select()
+          .single()
+
+        if (dishError) throw dishError
+        dishData = newDish
+
+               const { data: newInstance, error: instanceError } = await supabase
+                 .from('dinner_instances')
+                 .insert({
+                   dish_id: dishData.id,
+                   user_id: user.id,
+                   datetime: new Date(dinnerDate).toISOString(),
+                   location: location.toLowerCase(),
+                   notes: notes,
+                   photo_url: photoUrl,
+                   count: 1,
+                   last_consumed: new Date(dinnerDate).toISOString()
+                 })
+          .select()
+          .single()
+
+        if (instanceError) throw instanceError
+        instanceData = newInstance
+
+        // Add base tags for new dish
+        if (tags.length > 0) {
+          const baseTags = tags.filter(tag => tag.is_base_tag)
+          const instanceTags = tags.filter(tag => !tag.is_base_tag)
+
+          if (baseTags.length > 0) {
+            const { error: baseTagsError } = await supabase
+              .from('tags')
+              .insert(
+                baseTags.map(tag => ({
+                  dish_id: dishData.id,
+                  name: tag.name.toLowerCase(),
+                  type: tag.type,
+                  source: tag.source,
+                  is_base_tag: true,
+                  approved: true
+                }))
+              )
+
+            if (baseTagsError) throw baseTagsError
+          }
+
+          if (instanceTags.length > 0) {
+            const { error: instanceTagsError } = await supabase
+              .from('tags')
+              .insert(
+                instanceTags.map(tag => ({
+                  instance_id: instanceData.id,
+                  name: tag.name.toLowerCase(),
+                  type: tag.type,
+                  source: tag.source,
+                  is_base_tag: false,
+                  approved: true
+                }))
+              )
+
+            if (instanceTagsError) throw instanceTagsError
+          }
+        }
+
+               // Create initial consumption record for the new dish
+        
+        const { error: consumptionError } = await supabase
+          .from('consumption_records')
+          .insert({
+            instance_id: newInstance.id,
+            user_id: user.id,
+            consumed_at: new Date(dinnerDate).toISOString(),
+            location: location.toLowerCase()
+          })
+
+        if (consumptionError) throw consumptionError
+
+        // Save photo metadata
+        if (photoUrl && selectedFile) {
+          try {
+            const exifData = await extractExifData(selectedFile)
+            const { error: photoError } = await supabase
+              .from('photos')
+              .insert({
+                instance_id: instanceData.id,
+                url: photoUrl,
+                width: exifData.width || 0,
+                height: exifData.height || 0,
+                exif_lat: exifData.latitude || currentLocation?.latitude || null,
+                exif_lon: exifData.longitude || currentLocation?.longitude || null,
+                exif_time: exifData.timestamp || null
+              })
+
+            if (photoError) console.warn('Photo metadata save failed:', photoError)
+          } catch (error) {
+            console.warn('EXIF extraction failed:', error)
+          }
+        }
+
+        toast.success(`Created new dish: ${dishData.title}!`)
+      }
+
+      // Success - close and refresh
+      resetForm()
+      onOpenChange(false)
+      if (onSave) onSave()
+
+    } catch (error: any) {
+      console.error('Save failed:', error)
+      toast.error(`Save failed: ${error.message}`)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
-    <>
     <Dialog open={open} onOpenChange={(open) => {
       if (!open) {
         resetForm()
@@ -984,445 +709,391 @@ export const AddDinner: React.FC<AddDinnerProps> = ({ open, onOpenChange, editDi
     }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+         <DialogTitle className="flex items-center gap-2">
           <Camera className="h-5 w-5" />
-            {editDinner ? 'Edit Dinner' : 'Add New Dinner'}
-          </DialogTitle>
+           {editDinner?.isDishEdit 
+             ? `Edit Dish: ${editDinner.title}`
+             : editDinner?.isVariantEdit
+               ? `Edit Variant: ${editDinner.title}`
+               : repeatMealData?.action_type === 'log_again' 
+                 ? `Log Again: ${repeatMealData.dish.title}` 
+                 : repeatMealData 
+                   ? `New Variant: ${repeatMealData.dish.title}`
+                   : 'Add New Dish'}
+         </DialogTitle>
         </DialogHeader>
-        
-        {/* AI Analysis Overlay */}
-        {isAnalyzing && (
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg z-50">
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg text-center max-w-sm mx-4">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-purple-600" />
-              <h3 className="text-lg font-semibold mb-2">Analyzing</h3>
-              <p className="text-muted-foreground text-sm mb-4">
-                Please wait while we analyze your photo and suggest tags, title, and health score...
-              </p>
+
+        {/* Photo Upload Section */}
+        <div className="space-y-4">
+        <div>
+            {repeatMealData?.action_type !== 'log_again' && (
+              <Label>Photo {!repeatMealData && '*'}</Label>
+            )}
+            <div className="mt-2">
+              {/* Show photo selection for dish editing */}
+              {editDinner?.isDishEdit && editDinner?.variantPhotos && editDinner.variantPhotos.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Choose a photo from existing variants to represent this dish:
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Current base photo */}
+                    <div 
+                      className={`relative cursor-pointer rounded-lg overflow-hidden border-2 ${
+                        previewUrl === editDinner.photos?.[0]?.url ? 'border-primary' : 'border-gray-200'
+                      }`}
+                      onClick={() => {
+                        setPreviewUrl(editDinner.photos?.[0]?.url || null)
+                        setSelectedFile(null)
+                      }}
+                    >
+                      <img 
+                        src={editDinner.photos?.[0]?.url || '/placeholder.svg'} 
+                        alt="Current base photo" 
+                        className="w-full h-24 object-cover"
+                      />
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs p-1 text-center">
+                        Current Base Photo
+                      </div>
+                    </div>
+                    
+                    {/* Variant photos */}
+                    {editDinner.variantPhotos.map((variantPhoto, index) => (
+                      <div 
+                        key={index}
+                        className={`relative cursor-pointer rounded-lg overflow-hidden border-2 ${
+                          previewUrl === variantPhoto.url ? 'border-primary' : 'border-gray-200'
+                        }`}
+                        onClick={() => {
+                          setPreviewUrl(variantPhoto.url)
+                          setSelectedFile(null)
+                        }}
+                      >
+                        <img 
+                          src={variantPhoto.url} 
+                          alt={`Variant: ${variantPhoto.variant_title || 'Untitled'}`} 
+                          className="w-full h-24 object-cover"
+                        />
+                        <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs p-1 text-center">
+                          {variantPhoto.variant_title || 'Variant'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : previewUrl ? (
+                <div className="relative">
+                  <img 
+                    src={previewUrl} 
+                    alt="Preview" 
+                    className="w-full h-48 object-cover rounded-lg"
+                  />
+                  {repeatMealData?.action_type !== 'log_again' && !editDinner?.isDishEdit && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="absolute top-2 right-2"
+                      onClick={() => {
+                        setSelectedFile(null)
+                        setPreviewUrl(null)
+                        if (!repeatMealData) setHasUploadedPhoto(false)
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                repeatMealData?.action_type !== 'log_again' && !editDinner?.isDishEdit && (
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                    <Camera className="mx-auto h-12 w-12 text-gray-400" />
+                    <div className="mt-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload Photo
+                      </Button>
+                    </div>
+              </div>
+                )
+              )}
+              
+              {repeatMealData?.action_type !== 'log_again' && !editDinner?.isDishEdit && (
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,image/heic,image/heif,.heic,.heif"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+            )}
+          </div>
+        </div>
+
+          {/* AI Analysis Button */}
+          {selectedFile && repeatMealData?.action_type !== 'log_again' && !editDinner?.isDishEdit && (
+            <Button 
+              onClick={analyzeImage} 
+              disabled={isAnalyzing}
+              className="w-full"
+              variant="outline"
+            >
+              {isAnalyzing ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Wand2 className="mr-2 h-4 w-4" />
+              )}
+              {isAnalyzing ? 'Analyzing...' : 'AI Analysis'}
+            </Button>
+          )}
+          </div>
+
+        {/* Form Fields - Show after photo upload or for repeat meals */}
+        {(hasUploadedPhoto || repeatMealData) && (
+          <div className="space-y-4">
+            {/* Title - hidden for Log Again (shown in header) */}
+            {repeatMealData?.action_type !== 'log_again' && (
+              <div>
+                <Label htmlFor="title" className={showValidationErrors && !title.trim() ? "text-red-500 font-bold" : ""}>
+                  Title *
+                </Label>
+                <Input
+                  id="title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="What did you eat?"
+                  className={(showValidationErrors && !title.trim() ? "border-red-500 " : "") + "w-[94%] mx-auto sm:w-full"}
+                  disabled={!!repeatMealData || editDinner?.isVariantEdit}
+                />
+              </div>
+            )}
+
+          {/* Variant Title - Show editable for new variants/variant edit; show read-only for log again */}
+          {(repeatMealData?.action_type === 'new_variant' || editDinner?.isVariantEdit) && (
+            <div className="space-y-2">
+              <Label htmlFor="variant-title" className={showValidationErrors && !variantTitle.trim() ? "text-red-500 font-bold" : ""}>
+                Variant Title *
+              </Label>
+              <Input
+                id="variant-title"
+                value={variantTitle}
+                onChange={(e) => setVariantTitle(e.target.value)}
+                placeholder="e.g., Margherita Pizza, Spicy Chicken, etc."
+                className={(showValidationErrors && !variantTitle.trim() ? "border-red-500 " : "") + "w-[94%] mx-auto sm:w-full"}
+              />
+            </div>
+          )}
+          {repeatMealData?.action_type === 'log_again' && repeatMealData?.selected_variant?.variant_title && (
+            <div>
+              <Label>Variant</Label>
+              <Input value={repeatMealData.selected_variant.variant_title} disabled className="bg-muted/40" />
+            </div>
+          )}
+
+            {/* Date & Meal Type */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Date/Time - Hide for dish editing, variant editing, and multi-count variant editing */}
+              {!editDinner?.isDishEdit && !editDinner?.isVariantEdit && !(editDinner && editDinner.count > 1) && (
+                <div className="min-w-0">
+                  <Label htmlFor="date">Date *</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={dinnerDate.split('T')[0]}
+                    max={new Date().toISOString().split('T')[0]} // Prevent future dates
+                    onChange={(e) => {
+                      const selectedDate = e.target.value
+                      const today = new Date().toISOString().split('T')[0]
+                      
+                      // Prevent future dates
+                      if (selectedDate > today) {
+                        setDinnerDate(today + 'T12:00')
+                      } else {
+                        setDinnerDate(selectedDate + 'T12:00')
+                      }
+                    }}
+                    className="h-10 text-base text-left date-input w-[94%] mx-auto sm:w-full"
+                  />
+                </div>
+              )}
+              {/* Meal Type - For new dishes and dish editing only */}
+              {(!repeatMealData || editDinner?.isDishEdit) && !editDinner?.isVariantEdit && (
+                <div className="min-w-0">
+                  <Label>Meal Type</Label>
+                  <Select value={mealType} onValueChange={(value: any) => setMealType(value)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="breakfast">Breakfast</SelectItem>
+                      <SelectItem value="lunch">Lunch</SelectItem>
+                      <SelectItem value="dinner">Dinner</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+         {/* Location - Hide for dish editing, variant editing, and multi-count variant editing */}
+         {!editDinner?.isDishEdit && !editDinner?.isVariantEdit && !(editDinner && editDinner.count > 1) && (
+           <LocationInput
+             value={location}
+             onChange={setLocation}
+             placeholder="Where did you have this? (e.g., Home, Restaurant name)"
+             label="Location"
+             required={true}
+             showValidationError={showValidationErrors}
+             className="sm:col-span-2 min-w-0 w-[94%] mx-auto sm:w-full"
+           />
+         )}
+            </div>
+
+            {/* Health Score - For new dishes and dish editing only */}
+            {(!repeatMealData || editDinner?.isDishEdit) && !editDinner?.isVariantEdit && (
+              <div>
+                <Label>Health Score {healthScore !== null ? `(${healthScore}%)` : ''}</Label>
+                <div className="mt-2">
+                  <Slider
+                    value={[healthScore || 50]}
+                    onValueChange={(values) => setHealthScore(values[0])}
+                    max={100}
+                    min={0}
+                    step={5}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>Unhealthy</span>
+                    <span>Very Healthy</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Show existing health score for variants (read-only) - not shown for log again */}
+            {repeatMealData && repeatMealData.action_type !== 'log_again' && repeatMealData.dish.health_score && (
+              <div>
+                <Label>Health Score (from main dish)</Label>
+                <div className="mt-2 p-3 bg-muted rounded-md">
+                  <div className="text-sm font-medium">{repeatMealData.dish.health_score}% healthy</div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Health score is set at the dish level
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Effort Level - For new dishes and dish editing only */}
+            {(!repeatMealData || editDinner?.isDishEdit) && !editDinner?.isVariantEdit && (
+              <div>
+                <Label>Effort Level</Label>
+                <Select value={effort || ''} onValueChange={(value) => setEffort(value as any)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="How hard was it to make?" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="easy">Easy</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="hard">Hard</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Tags - Hide for log again mode */}
+            {repeatMealData?.action_type !== 'log_again' && (
+          <div>
+                <Label>Tags {repeatMealData && !editDinner?.isDishEdit && !editDinner?.isVariantEdit && '(Additional)'}</Label>
+                <div className="mt-2 space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map((tag, index) => (
+                      <Badge 
+                        key={index} 
+                        variant={tag.source === 'ai' ? 'secondary' : 'default'}
+                        className="flex items-center gap-1"
+                      >
+                        {tag.name}
+                        <button
+                          onClick={() => removeTag(index)}
+                          className="ml-1 text-xs hover:text-red-500"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+            <div className="flex gap-2">
+              <Input
+                      value={newTagInput}
+                      onChange={(e) => setNewTagInput(e.target.value)}
+                      placeholder={repeatMealData ? "Add variant-specific tags..." : "Add tags..."}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          addTag(newTagInput)
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => addTag(newTagInput)}
+                      disabled={!newTagInput.trim()}
+                    >
+                      Add
+              </Button>
+            </div>
+          </div>
+              </div>
+            )}
+
+         {/* Notes - Hide for log again mode */}
+         {repeatMealData?.action_type !== 'log_again' && (
+          <div>
+             <Label htmlFor="notes">Notes</Label>
+            <Textarea
+               id="notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+               placeholder="Any additional notes..."
+              rows={3}
+              className="w-[94%] mx-auto sm:w-full"
+            />
+          </div>
+         )}
+
+            {/* Actions */}
+            <div className="flex gap-2 justify-end pt-4">
               <Button 
                 variant="outline" 
-                size="sm"
                 onClick={() => {
                   resetForm()
                   onOpenChange(false)
                 }}
+                disabled={isSaving}
               >
-                Cancel Analysis
-              </Button>
-            </div>
-          </div>
-        )}
-        
-        <div className={`space-y-6 ${isAnalyzing ? 'pointer-events-none opacity-50' : ''}`}>
-        {/* Photo Upload */}
-          <div className="space-y-4">
-            <Label>Photo</Label>
-            {previewUrl ? (
-              <div className="relative">
-                {previewUrl === 'heic-placeholder' ? (
-                  <div className="w-full h-48 bg-gradient-to-br from-blue-50 to-indigo-100 border-2 border-dashed border-blue-300 rounded-lg flex flex-col items-center justify-center">
-                    <Camera className="h-12 w-12 text-blue-400 mb-2" />
-                    <p className="text-blue-600 font-medium text-sm">HEIC Photo Selected</p>
-                    <p className="text-blue-500 text-xs mt-1">{selectedFile?.name}</p>
-                    <p className="text-blue-400 text-xs mt-1">Preview not available • Upload will work</p>
-                  </div>
-                ) : (
-                  <img 
-                    src={previewUrl} 
-                    alt="Dinner preview" 
-                    className="w-full h-48 object-cover rounded-lg"
-                  />
-                )}
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="absolute top-2 right-2"
-                  onClick={() => {
-                    setSelectedFile(null)
-                    setPreviewUrl(null)
-                    // Don't reset hasUploadedPhoto - keep attributes visible
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-                {!isAnalyzing && previewUrl && previewUrl !== 'heic-placeholder' && (
-                  <div className="absolute bottom-2 left-2">
-                    <Button
-                      onClick={analyzeImage}
-                      className="bg-purple-600 hover:bg-purple-700 text-white"
-                      size="sm"
-                    >
-                      <Wand2 className="h-4 w-4 mr-2" />
-                      Analyze
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-                <Camera className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <p className="text-muted-foreground mb-4">Capture or upload a photo of your dinner</p>
-                <div className="flex gap-2 justify-center">
-                  <Button onClick={handleCameraCapture}>
-                    <Camera className="h-4 w-4 mr-2" />
-                    Take Photo
-                  </Button>
-                  <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload
-                  </Button>
-                </div>
-            <input
-                  ref={fileInputRef}
-              type="file"
-              accept="image/*,image/heic,image/heif,.heic,.heif"
-              onChange={handleFileSelect}
-              className="hidden"
-                />
-              </div>
-            )}
-        </div>
-
-        {/* Attributes Section - Only show after photo upload or when editing */}
-        {(hasUploadedPhoto || editDinner) && (
-          <>
-          {/* Title */}
-          <div className="space-y-2">
-            <Label htmlFor="title" className={showValidationErrors && !title.trim() ? "text-red-500 font-bold" : ""}>
-              Title *
-            </Label>
-            <Input
-              id="title"
-              placeholder="e.g., Salmon Teriyaki Bowl"
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value)
-                if (showValidationErrors && e.target.value.trim()) {
-                  setShowValidationErrors(false)
-                }
-              }}
-              className={showValidationErrors && !title.trim() ? "border-red-500" : ""}
-            />
-          </div>
-
-          {/* Date */}
-          <div className="space-y-2">
-            <Label htmlFor="datetime" className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Date
-            </Label>
-              <Input
-              id="datetime"
-              type="date"
-              value={dinnerDate.split('T')[0]}
-              onChange={(e) => setDinnerDate(e.target.value + 'T12:00')}
-              className="w-full"
-            />
-          </div>
-
-          {/* Meal Type */}
-          <div className="space-y-2">
-            <Label htmlFor="meal-type">Meal Type</Label>
-            <Select value={mealType} onValueChange={(value: 'breakfast' | 'lunch' | 'dinner' | 'other') => setMealType(value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select meal type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="breakfast">Breakfast</SelectItem>
-                <SelectItem value="lunch">Lunch</SelectItem>
-                <SelectItem value="dinner">Dinner</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Place */}
-          <div className="space-y-2">
-            <Label className={`flex items-center gap-2 ${showValidationErrors && !selectedPlace ? "text-red-500 font-bold" : ""}`}>
-                <MapPin className="h-4 w-4" />
-              Place *
-            </Label>
-            <div className={`flex gap-2 flex-wrap ${showValidationErrors && !selectedPlace ? "border border-red-500 rounded-md p-2" : ""}`}>
-              {selectedPlace ? (
-                // Show selected place with remove option
-                <Badge
-                  variant="default"
-                  className="flex items-center gap-1"
-                >
-                  {selectedPlace.name}
-                  <X
-                    className="h-3 w-3 cursor-pointer hover:text-red-500"
-                    onClick={() => setSelectedPlace(null)}
-                  />
-                </Badge>
-              ) : (
-                // Show preset places and add new option
-                <>
-                  {allPlaces.map((place) => (
-                    <Badge
-                      key={place.id}
-                      variant="outline"
-                      className="cursor-pointer flex items-center gap-1"
-                      onClick={() => {
-                        if (deletingPlaceId !== place.id) {
-                          setSelectedPlace(place)
-                          if (showValidationErrors) {
-                            setShowValidationErrors(false)
-                          }
-                        }
-                      }}
-                    >
-                      {place.name}
-                      {presetPlaceIds.has(place.id) && place.id !== '550e8400-e29b-41d4-a716-446655440001' && !place.id.startsWith('temp-') && (
-                        <AlertDialog onOpenChange={(open) => {
-                          if (!open) {
-                            setDeletingPlaceId(null)
-                          }
-                        }}>
-                          <AlertDialogTrigger asChild>
-                            <X
-                              className="h-3 w-3 cursor-pointer hover:text-red-500"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setDeletingPlaceId(place.id)
-                              }}
-                            />
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Place</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to delete "{place.name}"? This will remove it from your places list.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDeletePlace(place)}
-                                className="bg-red-600 hover:bg-red-700"
-                              >
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
-                    </Badge>
-                  ))}
-                  <Badge
-                    variant="outline"
-                    className="cursor-pointer flex items-center gap-1"
-                    onClick={() => setShowNewPlaceModal(true)}
-                  >
-                    <span className="text-lg">+</span>
-                    New Place
-                  </Badge>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              <Tag className="h-4 w-4" />
-              Tags
-            </Label>
-            <div className="flex gap-2 flex-wrap">
-              {tags.map((tag, index) => (
-                <Badge key={`${tag.name}-${index}`} variant="outline" className="flex items-center gap-1">
-                  {tag.name}
-                  <X 
-                    className="h-3 w-3 cursor-pointer hover:text-red-500" 
-                    onClick={() => removeTag(tag.name)}
-                  />
-                </Badge>
-              ))}
-            </div>
-            <Input
-              placeholder="Add tag and press Enter"
-              value={newTagInput}
-              onChange={(e) => setNewTagInput(e.target.value)}
-              onKeyPress={handleTagInputKeyPress}
-            />
-          </div>
-
-          {/* Health Score */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Health Score</Label>
-              {healthScore !== null && (
-                <Badge 
-                  className={`text-xs ${getHealthScoreBadgeClass(healthScore)}`}
-                >
-                  {healthScore}/100
-                </Badge>
-              )}
-            </div>
-            
-            <div className="space-y-2">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={healthScore || 50}
-                onChange={(e) => setHealthScore(Number(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-                style={{
-                  background: `linear-gradient(to right, #ef4444 0%, #f59e0b 50%, #10b981 100%)`
-                }}
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Unhealthy</span>
-                <span>Moderate</span>
-                <span>Healthy</span>
-              </div>
-
-            </div>
-          </div>
-
-          {/* Deliciousness Rating */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">How Yummy? (1-5 stars)</Label>
-              {deliciousness && (
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <span
-                      key={star}
-                      className={`text-lg ${star <= deliciousness ? 'text-yellow-400' : 'text-gray-300'}`}
-                    >
-                      ★
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2">
-              {[1, 2, 3, 4, 5].map((rating) => (
-                <Button
-                  key={rating}
-                  variant={deliciousness === rating ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setDeliciousness(deliciousness === rating ? null : rating)}
-                  className="flex items-center gap-1"
-                >
-                  <span className="text-yellow-400">★</span>
-                  {rating}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          {/* Effort Level */}
-          <div className="space-y-2">
-            <Label>Effort Level</Label>
-            <div className="flex gap-2">
-              {[
-                { value: 'easy', label: 'Easy', color: 'bg-green-100 text-green-800 hover:bg-green-200' },
-                { value: 'medium', label: 'Medium', color: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200' },
-                { value: 'hard', label: 'Hard', color: 'bg-red-100 text-red-800 hover:bg-red-200' }
-              ].map(({ value, label, color }) => (
-                <Button
-                  key={value}
-                  variant={effort === value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setEffort(effort === value ? null : value as 'easy' | 'medium' | 'hard')}
-                  className={effort === value ? color : ''}
-                >
-                  {label}
-              </Button>
-              ))}
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              placeholder="Any additional notes about this dinner..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-            />
-          </div>
-          </>
-        )}
-
-          {/* Actions */}
-          <div className="flex gap-2 justify-between">
-            <div>
-              {editDinner && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm" disabled={isSaving}>
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete Dinner</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Are you sure you want to delete "{editDinner.title}"? This action cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction 
-                        onClick={handleDelete}
-                        className="bg-red-600 hover:bg-red-700"
-                      >
-                        Delete
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => {
-                resetForm()
-                onOpenChange(false)
-              }}>
                 Cancel
           </Button>
               <Button 
                 onClick={handleSave} 
-                disabled={(!editDinner && !selectedFile) || isSaving}
+                disabled={(!repeatMealData && !editDinner && !selectedFile) || isSaving || !title.trim() || ((repeatMealData?.action_type === 'new_variant' || editDinner?.isVariantEdit) && !variantTitle.trim()) || (!editDinner?.isDishEdit && !editDinner?.isVariantEdit && !(editDinner && editDinner.count > 1) && !location.trim())}
               >
                 {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editDinner ? 'Update Dinner' : 'Save Dinner'}
+                {editDinner?.isDishEdit
+                  ? 'Save Dish'
+                  : editDinner?.isVariantEdit
+                    ? 'Save Variant'
+                    : repeatMealData?.action_type === 'log_again' 
+                      ? 'Log Again (+1)' 
+                      : repeatMealData 
+                        ? 'Save Variant' 
+                        : 'Save Dish'}
           </Button>
-            </div>
-          </div>
         </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
-
-    {/* New Place Modal */}
-    <Dialog open={showNewPlaceModal} onOpenChange={setShowNewPlaceModal}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Add New Place</DialogTitle>
-          <DialogDescription>
-            Create a new place for your dinner locations. You can choose to add it as a preset option for quick selection.
-          </DialogDescription>
-        </DialogHeader>
-        <NewPlaceForm 
-          onSave={(place, isDefault) => {
-            if (isDefault) {
-              // Add to preset place IDs set
-              setPresetPlaceIds(prev => new Set([...prev, place.id]))
-            }
-            setSelectedPlace(place)
-            setShowNewPlaceModal(false)
-          }}
-          onCancel={() => setShowNewPlaceModal(false)}
-        />
-      </DialogContent>
-    </Dialog>
-    </>
   )
 }

@@ -149,12 +149,39 @@ All colors MUST be HSL for consistent theming.
     @apply border-border;
   }
 
+  html, body { margin: 0; padding: 0; }
+
+  html {
+    /* Critical: non-white root so Safari toolbars tint correctly */
+    background-color: hsl(var(--background));
+    /* If you switch to a gradient, move it here */
+  }
+
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background: transparent;
+    min-height: 100dvh; /* dynamic vh to match iOS toolbars */
+  }
+
+  /* (reverted) scroll lock classes removed */
+
+  #root {
+    /* Reverted to previous behavior: app container transparent, normal flow */
+    min-height: 100dvh;
+    background-color: transparent;
   }
 }
 
 @layer utilities {
+  /* Normalize native date input appearance on iOS */
+  .date-input {
+    -webkit-appearance: none;
+       -moz-appearance: none;
+            appearance: none;
+    padding-left: 0.75rem; /* match other inputs px-3 */
+    padding-right: 0.75rem;
+    line-height: 1.5rem; /* align text vertically with h-10 */
+  }
   .line-clamp-1 {
     overflow: hidden;
     display: -webkit-box;
@@ -176,3 +203,16 @@ All colors MUST be HSL for consistent theming.
     -webkit-line-clamp: 3;
   }
 }
+
+/* ---- iOS Safari Toolbar White Fix: Nuclear Overrides ---- */
+:root { color-scheme: light dark; }
+html { background: hsl(var(--background)) !important; }
+body { background: transparent !important; min-height: 100dvh !important; }
+#root, #__next, .app, .viewport, .page { background: transparent !important; }
+
+/* Replace common 100vh usages coming from utility classes */
+:where(.h-screen, .min-h-screen) { min-height: 100dvh !important; height: auto !important; }
+
+/* Avoid fixed backgrounds on iOS which cause white seams */
+*[style*="background-attachment: fixed"],
+.bg-fixed { background-attachment: scroll !important; }
