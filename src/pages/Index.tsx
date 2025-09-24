@@ -179,15 +179,16 @@ const Index = () => {
       
       console.log('Fetching dishes for user:', user.id);
       
-      // Load dishes with their instances and tags
+      // Load dishes with their instances and base tags
       const { data, error } = await supabase
         .from('dishes')
         .select(`
           id, title, health_score, base_photo_url, effort, meal_type, notes, created_at, updated_at,
           dinner_instances(id, datetime, location, variant_title, notes, photo_url, place_id, count, last_consumed, consumption_records(id)),
-          tags!left(name, type, is_base_tag)
+          tags!inner(name, type, is_base_tag)
         `)
         .eq('user_id', user.id)
+        .eq('tags.is_base_tag', true)
         .order('updated_at', { ascending: false })
         .limit(20);
       
