@@ -69,6 +69,7 @@ export const MealTypeSelector = ({ isOpen, onClose, onNewDish, onRepeatMeal }: M
             )
           `)
           .eq('user_id', user.id)
+          .eq('tags.is_base_tag', true)
           .ilike('title', `%${query}%`)
           .order('updated_at', { ascending: false }),
         
