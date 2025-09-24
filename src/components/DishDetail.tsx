@@ -40,6 +40,11 @@ export const DishDetail: React.FC<DishDetailProps> = ({
   // Confirmation dialog states
   const [instanceToDelete, setInstanceToDelete] = useState<string | null>(null)
   const [showDeleteDishDialog, setShowDeleteDishDialog] = useState(false)
+  
+  // Debug: Monitor dialog state changes
+  useEffect(() => {
+    console.log('showDeleteDishDialog state changed to:', showDeleteDishDialog)
+  }, [showDeleteDishDialog])
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
   const [isDeletingInstance, setIsDeletingInstance] = useState(false)
   const [isDeletingDish, setIsDeletingDish] = useState(false)
@@ -207,19 +212,29 @@ export const DishDetail: React.FC<DishDetailProps> = ({
   }
 
   const handleDeleteDishConfirmed = async () => {
-    if (!user || !dish || !confirmDeleteAll) return
+    if (!user || !dish || !confirmDeleteAll) {
+      console.log('Delete validation failed:', { user: !!user, dish: !!dish, confirmDeleteAll })
+      return
+    }
     
+    console.log('Starting dish deletion for:', dish.id)
     setIsDeletingDish(true)
     try {
       // Delete the entire dish (instances, photos, tags will cascade)
-      const { error } = await supabase
+      const { error, data } = await supabase
         .from('dishes')
         .delete()
         .eq('id', dish.id)
         .eq('user_id', user.id)
 
-      if (error) throw error
+      console.log('Delete result:', { error, data })
 
+      if (error) {
+        console.error('Supabase delete error:', error)
+        throw error
+      }
+
+      console.log('Dish deleted successfully')
       toast.success('Dish and all instances deleted successfully')
       onClose()
       onRefresh()
@@ -624,6 +639,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
   if (!dish) return null
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
@@ -649,7 +665,12 @@ export const DishDetail: React.FC<DishDetailProps> = ({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setShowDeleteDishDialog(true)}
+                onClick={() => {
+                  console.log('Delete button clicked')
+                  console.log('Current showDeleteDishDialog state:', showDeleteDishDialog)
+                  setShowDeleteDishDialog(true)
+                  console.log('Set showDeleteDishDialog to true')
+                }}
                 className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2 sm:px-3"
                 aria-label="Delete Dish"
                 title="Delete Dish"
@@ -1078,8 +1099,10 @@ export const DishDetail: React.FC<DishDetailProps> = ({
           </div>
         )}
       </DialogContent>
+    </Dialog>
 
-      {/* Instance Delete Confirmation Dialog */}
+    {/* All AlertDialogs moved outside main Dialog to avoid nesting issues */}
+    {/* Instance Delete Confirmation Dialog */}
       <AlertDialog open={!!instanceToDelete} onOpenChange={() => setInstanceToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1103,7 +1126,10 @@ export const DishDetail: React.FC<DishDetailProps> = ({
       </AlertDialog>
 
       {/* Dish Delete Confirmation Dialog */}
-      <AlertDialog open={showDeleteDishDialog} onOpenChange={setShowDeleteDishDialog}>
+      <AlertDialog open={showDeleteDishDialog} onOpenChange={(open) => {
+        console.log('Delete dialog onOpenChange:', open)
+        setShowDeleteDishDialog(open)
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Entire Dish?</AlertDialogTitle>
@@ -1192,7 +1218,6 @@ export const DishDetail: React.FC<DishDetailProps> = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-    </Dialog>
+    </>
   )
 }
