@@ -855,14 +855,14 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
           <div className="space-y-4">
             {/* Title - hidden for Log Again (shown in header) */}
             {repeatMealData?.action_type !== 'log_again' && (
-              <div>
+          <div>
                 <Label htmlFor="title" className={showValidationErrors && !title.trim() ? "text-red-500 font-bold" : ""}>
                   Title *
                 </Label>
-                <Input
+            <Input
                   id="title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
                   placeholder="What did you eat?"
                   className={(showValidationErrors && !title.trim() ? "border-red-500 " : "") + "w-[94%] mx-auto sm:w-full"}
                   disabled={!!repeatMealData || editDinner?.isVariantEdit}
@@ -882,8 +882,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                 onChange={(e) => setVariantTitle(e.target.value)}
                 placeholder="e.g., Margherita Pizza, Spicy Chicken, etc."
                 className={(showValidationErrors && !variantTitle.trim() ? "border-red-500 " : "") + "w-[94%] mx-auto sm:w-full"}
-              />
-            </div>
+            />
+          </div>
           )}
           {repeatMealData?.action_type === 'log_again' && repeatMealData?.selected_variant?.variant_title && (
             <div>
@@ -923,7 +923,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                 <div className="min-w-0">
                   <Label>Meal Type</Label>
                   <Select value={mealType} onValueChange={(value: any) => setMealType(value)}>
-                    <SelectTrigger>
+                    <SelectTrigger className="w-[94%] mx-auto sm:w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -986,10 +986,10 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
 
             {/* Effort Level - For new dishes and dish editing only */}
             {(!repeatMealData || editDinner?.isDishEdit) && !editDinner?.isVariantEdit && (
-              <div>
+              <div className="min-w-0">
                 <Label>Effort Level</Label>
                 <Select value={effort || ''} onValueChange={(value) => setEffort(value as any)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-[94%] mx-auto sm:w-full">
                     <SelectValue placeholder="How hard was it to make?" />
                   </SelectTrigger>
                   <SelectContent>

@@ -552,7 +552,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
               <div>
                 <Label>Meal Type</Label>
                 <Select value={mealType} onValueChange={(value: any) => setMealType(value)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-[94%] mx-auto sm:w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -587,7 +587,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
             <div>
               <Label>Effort Level</Label>
               <Select value={effort || ''} onValueChange={(value) => setEffort(value as any)}>
-                <SelectTrigger>
+                <SelectTrigger className="w-[94%] mx-auto sm:w-full">
                   <SelectValue placeholder="How hard was it to make?" />
                 </SelectTrigger>
                 <SelectContent>
