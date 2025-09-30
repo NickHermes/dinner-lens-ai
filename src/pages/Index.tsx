@@ -14,7 +14,7 @@ import { BottomNavigation } from "@/components/BottomNavigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 
 // Mock data for demonstration
@@ -64,6 +64,29 @@ const Index = () => {
   const [repeatMealData, setRepeatMealData] = useState<any>(null);
   const [initialTitle, setInitialTitle] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Listen for custom event to show MealTypeSelector
+  useEffect(() => {
+    const handleShowMealTypeSelector = () => {
+      console.log('Custom event received: showMealTypeSelector');
+      setShowMealTypeSelector(true);
+    };
+
+    window.addEventListener('showMealTypeSelector', handleShowMealTypeSelector);
+    return () => {
+      window.removeEventListener('showMealTypeSelector', handleShowMealTypeSelector);
+    };
+  }, []);
+
+  // Debug logging for state changes
+  useEffect(() => {
+    console.log('Index state changed:', {
+      showMealTypeSelector,
+      showAddDinner,
+      editDinner: !!editDinner,
+      repeatMealData: !!repeatMealData
+    });
+  }, [showMealTypeSelector, showAddDinner, editDinner, repeatMealData]);
 
   const handleDishClick = (dish: any) => {
     setSelectedDish(dish);
@@ -133,6 +156,7 @@ const Index = () => {
 
   const handleCloseAddDinner = () => {
     setShowAddDinner(false);
+    setShowMealTypeSelector(false);
     setEditDinner(null);
     setRepeatMealData(null);
     setInitialTitle('');
@@ -515,7 +539,10 @@ const Index = () => {
       <BottomNavigation />
 
       {/* Floating Action Button */}
-      <FloatingActionButton onClick={() => setShowMealTypeSelector(true)} />
+      <FloatingActionButton onClick={() => {
+        console.log('FloatingActionButton clicked');
+        setShowMealTypeSelector(true);
+      }} />
 
       {/* Modals */}
       <DishDetail

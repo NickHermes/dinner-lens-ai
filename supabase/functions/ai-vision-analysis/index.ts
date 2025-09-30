@@ -8,7 +8,7 @@ const corsHeaders = {
 
 interface AnalysisRequest {
   imageUrl: string
-  userId: string
+  dinnerId: string
 }
 
 interface AITag {
@@ -29,7 +29,29 @@ serve(async (req) => {
   }
 
   try {
-    const { imageUrl, userId }: AnalysisRequest = await req.json()
+    const { imageUrl, dinnerId }: AnalysisRequest = await req.json()
+    if (!imageUrl) {
+      return new Response(JSON.stringify({ error: 'imageUrl is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+    
+    // Quick reachability check to surface clearer errors
+    try {
+      const head = await fetch(imageUrl, { method: 'HEAD' })
+      if (!head.ok) {
+        return new Response(JSON.stringify({ error: `Image not reachable: ${head.status}` }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+    } catch (e) {
+      return new Response(JSON.stringify({ error: `Failed to fetch image URL: ${(e as Error).message}` }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
     
     // Get OpenAI API key from Supabase secrets
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY')

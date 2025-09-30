@@ -194,7 +194,7 @@ export const MealTypeSelector = ({ isOpen, onClose, onNewDish, onRepeatMeal }: M
   const handleVariantSelect = (dish: PreviousDish, variant?: DinnerInstance, isLogAgain: boolean = false) => {
     setShowVariants(false)
     setSelectedDish(null)
-    setShowSearch(false)
+    setShowSearch(true) // Reset to true so search bar appears next time
     setSearchQuery('')
     setSearchResults([])
     
@@ -215,8 +215,29 @@ export const MealTypeSelector = ({ isOpen, onClose, onNewDish, onRepeatMeal }: M
     setSelectedDish(null)
   }
 
+  // Debug logging
+  console.log('MealTypeSelector render state:', {
+    isOpen,
+    showSearch,
+    showVariants,
+    searchQuery,
+    searchResultsLength: searchResults.length,
+    selectedDish: !!selectedDish
+  });
+
+  const handleClose = () => {
+    // Reset all internal state when closing
+    setSearchQuery('')
+    setSearchResults([])
+    setIsSearching(false)
+    setShowSearch(true)
+    setSelectedDish(null)
+    setShowVariants(false)
+    onClose()
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader className="mb-3">
           <DialogTitle>Add to Food Diary</DialogTitle>
