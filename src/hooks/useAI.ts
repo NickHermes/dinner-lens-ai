@@ -35,6 +35,9 @@ export const useAI = () => {
       const fileExt = imageFile.name.split('.').pop()
       const fileName = `${dinnerId}-${Date.now()}.${fileExt}`
       
+      console.log('Starting AI analysis for file:', imageFile.name, 'size:', imageFile.size)
+      console.log('Uploading to Supabase Storage with filename:', fileName)
+      
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('dinner-photos')
         .upload(fileName, imageFile, {
@@ -42,19 +45,45 @@ export const useAI = () => {
           upsert: false
         })
 
+      console.log('Upload result:', { uploadData, uploadError })
       if (uploadError) throw uploadError
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('dinner-photos')
-        .getPublicUrl(fileName)
-
-      const imageUrl = urlData.publicUrl
+      // Prefer a short-lived signed URL for OpenAI fetch, but store public URL in DB
+      let imageUrlForAI: string
+      let imageUrlForDb: string
+      console.log('Creating signed URL for file:', fileName)
+      try {
+        const { data: signed } = await supabase.storage
+          .from('dinner-photos')
+          .createSignedUrl(fileName, 300) // allow up to 5 minutes for analysis
+        console.log('Signed URL response:', signed)
+        if (signed?.signedUrl) {
+          imageUrlForAI = signed.signedUrl
+          console.log('Using signed URL for AI:', imageUrlForAI)
+        } else {
+          // Fallback to public URL (if bucket is public)
+          const { data: urlData } = supabase.storage
+            .from('dinner-photos')
+            .getPublicUrl(fileName)
+          imageUrlForAI = urlData.publicUrl
+          imageUrlForDb = urlData.publicUrl
+          console.log('Using public URL for AI:', imageUrlForAI)
+        }
+      } catch (signedError) {
+        console.warn('Signed URL creation failed:', signedError)
+        const { data: urlData } = supabase.storage
+          .from('dinner-photos')
+          .getPublicUrl(fileName)
+        imageUrlForAI = urlData.publicUrl
+        imageUrlForDb = urlData.publicUrl
+        console.log('Fallback to public URL:', imageUrlForAI)
+      }
 
       // Call AI analysis Edge Function
+      console.log('Calling AI analysis with URL:', imageUrlForAI)
       const { data, error } = await supabase.functions.invoke('ai-vision-analysis', {
         body: {
-          imageUrl,
+          imageUrl: imageUrlForAI,
           dinnerId
         }
       })
@@ -72,9 +101,14 @@ export const useAI = () => {
       }
 
       // Store photo record with EXIF data
+      // Ensure we store a stable (public) URL in DB
+      const photoUrlToStore = imageUrlForDb ?? (await supabase.storage
+        .from('dinner-photos')
+        .getPublicUrl(fileName)).data.publicUrl
+
       await supabase.from('photos').insert({
         dinner_id: dinnerId,
-        url: imageUrl,
+        url: photoUrlToStore,
         width: exifData.width || 0,
         height: exifData.height || 0,
         exif_lat: exifData.latitude || null,
@@ -91,9 +125,10 @@ export const useAI = () => {
 
     } catch (error) {
       console.error('AI Analysis Error:', error)
+      console.error('Error details:', JSON.stringify(error, null, 2))
       toast({
         title: "Analysis Failed",
-        description: "Could not analyze the image. Please try again.",
+        description: `Could not analyze the image: ${error.message || 'Unknown error'}`,
         variant: "destructive"
       })
       return null

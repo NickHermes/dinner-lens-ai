@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Camera, Upload, X, Loader2, Wand2, Trash2 } from 'lucide-react'
+import { Camera, Upload, X, Loader2, Wand2, Trash2, ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase, Dish, DinnerInstance } from '@/lib/supabase'
 import { toast } from 'sonner'
@@ -70,7 +70,9 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
   // UI state
   const [isSaving, setIsSaving] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false)
   const [hasUploadedPhoto, setHasUploadedPhoto] = useState(false)
+  const [aiAnalysisCompleted, setAiAnalysisCompleted] = useState(false)
   const [showValidationErrors, setShowValidationErrors] = useState(false)
   const [currentLocation, setCurrentLocation] = useState<{latitude: number, longitude: number} | null>(null)
 
@@ -164,6 +166,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
     setHasUploadedPhoto(false)
     setShowValidationErrors(false)
     setCurrentLocation(null)
+    setAiAnalysisCompleted(false)
+    setIsProcessingPhoto(false)
   }
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -176,8 +180,9 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
       size: file.size 
     })
 
-    setSelectedFile(file)
+    setAiAnalysisCompleted(false) // Reset AI analysis state for new file
     setHasUploadedPhoto(true)
+    setIsProcessingPhoto(true)
 
     // Get current location
     if (navigator.geolocation) {
@@ -197,19 +202,52 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
     }
 
     try {
+      console.log('Starting image processing...')
       const result = await processFileAndExtractExif(file)
-      setPreviewUrl(URL.createObjectURL(file))
+      console.log('Image processing complete, setting preview...')
+      setSelectedFile(result.file)  // Use compressed file for all operations
+      
+      // Add a small delay to ensure loading animation is visible
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      setPreviewUrl(URL.createObjectURL(result.file))  // Use converted file for preview
       console.log('File processed for preview:', result.exifData)
+      
+      // Show compression info if file was compressed
+      if (result.file.size < file.size) {
+        const compressionRatio = Math.round((1 - result.file.size / file.size) * 100)
+        console.log('Compression successful:', {
+          original: `${Math.round(file.size / 1024)}KB`,
+          compressed: `${Math.round(result.file.size / 1024)}KB`,
+          saved: `${Math.round((file.size - result.file.size) / 1024)}KB`,
+          ratio: `${compressionRatio}%`
+        })
+        // Compression info shown in console only (no toast popup)
+      } else {
+        console.log('No compression needed:', {
+          size: `${Math.round(result.file.size / 1024)}KB`,
+          reason: 'File too small or already optimized'
+        })
+      }
     } catch (error) {
       console.error('Error processing file:', error)
       toast.error('Failed to process image. Please try again.')
+    } finally {
+      setIsProcessingPhoto(false)
     }
   }
 
   const analyzeImage = async () => {
     if (!selectedFile) return
 
+    console.log('Starting AI analysis...')
     setIsAnalyzing(true)
+    
+    // Clear previous AI-generated tags before starting new analysis
+    setTags(prev => prev.filter(tag => tag.source !== 'ai'))
+    
+    const abortController = new AbortController()
+    
     try {
       // Convert HEIC if needed
       let fileToAnalyze = selectedFile
@@ -230,47 +268,69 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
         }
       }
 
-      // Convert to base64
-      const reader = new FileReader()
-      reader.onload = async (e) => {
-        const base64 = e.target?.result as string
-        
-        const { data, error } = await supabase.functions.invoke('ai-vision-analysis', {
-          body: { image: base64 }
-        })
+      // Convert to base64 and analyze
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => resolve(e.target?.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(fileToAnalyze)
+      })
+      
+      // Generate a temporary dinner ID for analysis
+      const tempDinnerId = `temp-${Date.now()}`
+      
+      const { data, error } = await supabase.functions.invoke('ai-vision-analysis', {
+        body: { 
+          imageUrl: base64,
+          dinnerId: tempDinnerId
+        },
+        signal: abortController.signal
+      })
 
-        if (error) throw error
+      if (error) throw error
 
-        // Apply AI suggestions
-        console.log('AI response data:', data)
-        if (data.suggested_title) {
-          console.log('Setting title to:', data.suggested_title)
-          setTitle(data.suggested_title)
-        }
-        if (data.health_score) {
-          console.log('Setting health score to:', data.health_score)
-          setHealthScore(data.health_score)
-        }
-        if (data.suggested_tags) {
-          console.log('Adding tags:', data.suggested_tags)
-          const aiTags: Tag[] = data.suggested_tags.map((tag: any) => ({
-            name: tag.name.toLowerCase(),
-            type: tag.type || 'custom',
-            source: 'ai' as const,
-            is_base_tag: !repeatMealData // Base tags for new dishes, instance tags for repeats
-          }))
-          setTags(prev => [...prev, ...aiTags])
-        }
-
-        toast.success('AI analysis complete! Review and adjust the suggestions.')
+      // Apply AI suggestions
+      console.log('AI response data:', data)
+      if (data.suggested_title) {
+        console.log('Setting title to:', data.suggested_title)
+        setTitle(data.suggested_title)
       }
-      reader.readAsDataURL(fileToAnalyze)
+      if (data.health_score) {
+        console.log('Setting health score to:', data.health_score)
+        setHealthScore(data.health_score)
+      }
+      if (data.suggested_tags) {
+        console.log('Adding tags:', data.suggested_tags)
+        const aiTags: Tag[] = data.suggested_tags.map((tag: any) => ({
+          name: tag.name.toLowerCase(),
+          type: tag.type || 'custom',
+          source: 'ai' as const,
+          is_base_tag: !repeatMealData // Base tags for new dishes, instance tags for repeats
+        }))
+        setTags(prev => [...prev, ...aiTags])
+      }
+
+      console.log('AI analysis completed successfully')
+      setAiAnalysisCompleted(true)
     } catch (error: any) {
-      console.error('AI analysis failed:', error)
-      toast.error(`AI analysis failed: ${error.message}. You can still save manually.`)
+      if (error.name === 'AbortError') {
+        console.log('AI analysis cancelled by user')
+        toast.info('AI analysis cancelled')
+        // Don't set completed to true if cancelled - user can try again
+      } else {
+        console.error('AI analysis failed:', error)
+        console.log(`AI analysis failed: ${error.message}. You can still save manually.`)
+        // Don't set completed to true if failed - user can try again
+      }
     } finally {
       setIsAnalyzing(false)
     }
+  }
+
+  const cancelAnalysis = () => {
+    setIsAnalyzing(false)
+    // Note: We can't actually abort the request here since it's already in progress
+    // But we can stop the UI from showing the loading state
   }
 
   const addTag = (tagName: string) => {
@@ -700,6 +760,16 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
     }
   }
 
+  // Debug logging
+  console.log('AddDinner render state:', {
+    open,
+    hasUploadedPhoto,
+    repeatMealData: !!repeatMealData,
+    editDinner: !!editDinner,
+    selectedFile: !!selectedFile,
+    previewUrl: !!previewUrl
+  });
+
   return (
     <Dialog open={open} onOpenChange={(open) => {
       if (!open) {
@@ -709,26 +779,46 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
     }}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-         <DialogTitle className="flex items-center gap-2">
-          <Camera className="h-5 w-5" />
-           {editDinner?.isDishEdit 
-             ? `Edit Dish: ${editDinner.title}`
-             : editDinner?.isVariantEdit
-               ? `Edit Variant: ${editDinner.title}`
-               : repeatMealData?.action_type === 'log_again' 
-                 ? `Log Again: ${repeatMealData.dish.title}` 
-                 : repeatMealData 
-                   ? `New Variant: ${repeatMealData.dish.title}`
-                   : 'Add New Dish'}
-         </DialogTitle>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Camera className="h-5 w-5" />
+              <DialogTitle>
+                {editDinner?.isDishEdit 
+                  ? `Edit Dish: ${editDinner.title}`
+                  : editDinner?.isVariantEdit
+                    ? `Edit Variant: ${editDinner.title}`
+                    : repeatMealData?.action_type === 'log_again' 
+                      ? `Log Again: ${repeatMealData.dish.title}` 
+                      : repeatMealData 
+                        ? `New Variant: ${repeatMealData.dish.title}`
+                        : 'Add New Dish'}
+              </DialogTitle>
+            </div>
+            {repeatMealData?.action_type === 'log_again' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  // Go back to dish selection (MealTypeSelector)
+                  onOpenChange(false)
+                  // Trigger the parent to show MealTypeSelector again
+                  setTimeout(() => {
+                    // This will be handled by the parent component
+                    window.dispatchEvent(new CustomEvent('showMealTypeSelector'))
+                  }, 100)
+                }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         {/* Photo Upload Section */}
         <div className="space-y-4">
         <div>
-            {repeatMealData?.action_type !== 'log_again' && (
-              <Label>Photo {!repeatMealData && '*'}</Label>
-            )}
             <div className="mt-2">
               {/* Show photo selection for dish editing */}
               {editDinner?.isDishEdit && editDinner?.variantPhotos && editDinner.variantPhotos.length > 0 ? (
@@ -788,7 +878,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                     alt="Preview" 
                     className="w-full h-48 object-cover rounded-lg"
                   />
-                  {repeatMealData?.action_type !== 'log_again' && !editDinner?.isDishEdit && (
+                  {(repeatMealData?.action_type === 'new_variant' || (!repeatMealData && !editDinner?.isDishEdit)) && !isAnalyzing && (
                     <Button
                       variant="destructive"
                       size="sm"
@@ -796,15 +886,32 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                       onClick={() => {
                         setSelectedFile(null)
                         setPreviewUrl(null)
-                        if (!repeatMealData) setHasUploadedPhoto(false)
+                        setAiAnalysisCompleted(false)
+                        setIsProcessingPhoto(false)
+                        // Clear file input to allow selecting same file again
+                        if (fileInputRef.current) {
+                          fileInputRef.current.value = ''
+                        }
+                        // Keep hasUploadedPhoto true to show the form with placeholder
+                        // Only reset if it's a repeat meal (where we don't want to show form)
+                        if (repeatMealData) setHasUploadedPhoto(false)
                       }}
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   )}
                 </div>
+              ) : isProcessingPhoto ? (
+                // Show loading animation while processing photo
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                  <div className="flex flex-col items-center space-y-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Processing image...</p>
+                  </div>
+                </div>
               ) : (
-                repeatMealData?.action_type !== 'log_again' && !editDinner?.isDishEdit && (
+                // Show placeholder for new dishes and new variants when no photo is selected
+                (!repeatMealData || repeatMealData?.action_type === 'new_variant') && !editDinner?.isDishEdit && (
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
                     <Camera className="mx-auto h-12 w-12 text-gray-400" />
                     <div className="mt-4">
@@ -820,7 +927,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                 )
               )}
               
-              {repeatMealData?.action_type !== 'log_again' && !editDinner?.isDishEdit && (
+              {(repeatMealData?.action_type === 'new_variant' || (!repeatMealData && !editDinner?.isDishEdit)) && (
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -832,29 +939,42 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
           </div>
         </div>
 
-          {/* AI Analysis Button */}
-          {selectedFile && repeatMealData?.action_type !== 'log_again' && !editDinner?.isDishEdit && (
-            <Button 
-              onClick={analyzeImage} 
-              disabled={isAnalyzing}
-              className="w-full"
-              variant="outline"
-            >
+          {/* AI Analysis Button - Only show for new dishes (not variants) */}
+          {selectedFile && previewUrl && !aiAnalysisCompleted && !repeatMealData && !editDinner?.isDishEdit && (
+            <div className="w-full">
+              {console.log('isAnalyzing state:', isAnalyzing)}
               {isAnalyzing ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <div className="flex items-center justify-center space-x-2 p-4 border rounded-lg bg-muted/50">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">AI is analyzing your image...</span>
+                  <Button 
+                    onClick={cancelAnalysis}
+                    variant="ghost"
+                    size="sm"
+                    className="ml-2 h-8 px-2"
+                  >
+                    Cancel
+                  </Button>
+                </div>
               ) : (
-                <Wand2 className="mr-2 h-4 w-4" />
+                <Button 
+                  onClick={analyzeImage} 
+                  className="w-full"
+                  variant="outline"
+                >
+                  <Wand2 className="mr-2 h-4 w-4" />
+                  AI Analysis
+                </Button>
               )}
-              {isAnalyzing ? 'Analyzing...' : 'AI Analysis'}
-            </Button>
+            </div>
           )}
           </div>
 
-        {/* Form Fields - Show after photo upload or for repeat meals */}
-        {(hasUploadedPhoto || repeatMealData) && (
-          <div className="space-y-4">
-            {/* Title - hidden for Log Again (shown in header) */}
-            {repeatMealData?.action_type !== 'log_again' && (
+        {/* Form Fields - Show when modal is open */}
+        {open && (
+          <div className={`space-y-6 mt-8 ${isAnalyzing ? 'pointer-events-none opacity-50' : ''}`}>
+            {/* Title - hidden for Log Again (shown in header) and new variants (shown in dish info) */}
+            {repeatMealData?.action_type !== 'log_again' && repeatMealData?.action_type !== 'new_variant' && (
           <div>
                 <Label htmlFor="title" className={showValidationErrors && !title.trim() ? "text-red-500 font-bold" : ""}>
                   Title *
@@ -869,6 +989,77 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                 />
               </div>
             )}
+
+          {/* Dish Information - Show for new variants */}
+          {repeatMealData?.action_type === 'new_variant' && (
+            <div className="space-y-6 p-6 bg-muted/30 rounded-lg border">
+              <h3 className="text-base font-semibold text-muted-foreground">Dish Information</h3>
+              
+              {/* Dish Title and Image */}
+              <div className="flex items-center space-x-4">
+                {repeatMealData.dish.photos?.[0]?.url && (
+                  <img 
+                    src={repeatMealData.dish.photos[0].url} 
+                    alt={repeatMealData.dish.title}
+                    className="w-20 h-20 object-cover rounded-lg"
+                  />
+                )}
+                <div className="flex-1">
+                  <p className="font-semibold text-xl">{repeatMealData.dish.title}</p>
+                </div>
+              </div>
+
+              {/* Health Score */}
+              {repeatMealData.dish.health_score !== null && (
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">Health Score</Label>
+                  <div className="flex items-center space-x-4">
+                    <span className="text-base font-medium min-w-[3rem]">{repeatMealData.dish.health_score}%</span>
+                    <div className="flex-1 bg-muted rounded-full h-3">
+                      <div 
+                        className="bg-primary h-3 rounded-full" 
+                        style={{ width: `${repeatMealData.dish.health_score}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Effort Level and Meal Type in a row */}
+              <div className="flex items-center space-x-8">
+                {repeatMealData.dish.effort && (
+                  <div className="flex items-center space-x-2">
+                    <Label className="text-sm font-medium text-gray-700">Effort Level</Label>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                      {repeatMealData.dish.effort} effort
+                    </span>
+                  </div>
+                )}
+                {repeatMealData.dish.meal_type && (
+                  <div className="flex items-center space-x-2">
+                    <Label className="text-sm font-medium text-gray-700">Meal Type</Label>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                      {repeatMealData.dish.meal_type}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Base Tags */}
+              {repeatMealData.dish.tags && repeatMealData.dish.tags.length > 0 && (
+                <div className="flex items-center space-x-2">
+                  <Label className="text-sm font-medium text-gray-700">Base Tags</Label>
+                  <div className="flex flex-wrap gap-1">
+                    {repeatMealData.dish.tags.map((tag, index) => (
+                      <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                        {tag.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Variant Title - Show editable for new variants/variant edit; show read-only for log again */}
           {(repeatMealData?.action_type === 'new_variant' || editDinner?.isVariantEdit) && (
@@ -885,6 +1076,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
             />
           </div>
           )}
+
           {repeatMealData?.action_type === 'log_again' && repeatMealData?.selected_variant?.variant_title && (
             <div>
               <Label>Variant</Label>
@@ -914,7 +1106,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                         setDinnerDate(selectedDate + 'T12:00')
                       }
                     }}
-                    className="h-10 text-base text-left date-input w-[94%] mx-auto sm:w-full"
+                    className="h-10 text-base text-left w-[94%] mx-auto sm:w-full"
                   />
                 </div>
               )}
@@ -936,18 +1128,21 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                 </div>
               )}
 
-         {/* Location - Hide for dish editing, variant editing, and multi-count variant editing */}
-         {!editDinner?.isDishEdit && !editDinner?.isVariantEdit && !(editDinner && editDinner.count > 1) && (
-           <LocationInput
-             value={location}
-             onChange={setLocation}
-             placeholder="Where did you have this? (e.g., Home, Restaurant name)"
-             label="Location"
-             required={true}
-             showValidationError={showValidationErrors}
-             className="sm:col-span-2 min-w-0 w-[94%] mx-auto sm:w-full"
-           />
-         )}
+              {/* Location - Hide for dish editing, variant editing, and multi-count variant editing */}
+              {!editDinner?.isDishEdit && !editDinner?.isVariantEdit && !(editDinner && editDinner.count > 1) && (
+                <div className="min-w-0">
+                  <Label htmlFor="location" className={showValidationErrors && !location.trim() ? "text-red-500 font-bold" : ""}>
+                    Location *
+                  </Label>
+                  <Input
+                    id="location"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="Where did you have this? (e.g., Home, Restaurant name)"
+                    className={(showValidationErrors && !location.trim() ? "border-red-500 " : "") + "h-10 text-base w-[94%] mx-auto sm:w-full"}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Health Score - For new dishes and dish editing only */}
@@ -971,18 +1166,6 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
               </div>
             )}
 
-            {/* Show existing health score for variants (read-only) - not shown for log again */}
-            {repeatMealData && repeatMealData.action_type !== 'log_again' && repeatMealData.dish.health_score && (
-              <div>
-                <Label>Health Score (from main dish)</Label>
-                <div className="mt-2 p-3 bg-muted rounded-md">
-                  <div className="text-sm font-medium">{repeatMealData.dish.health_score}% healthy</div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    Health score is set at the dish level
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Effort Level - For new dishes and dish editing only */}
             {(!repeatMealData || editDinner?.isDishEdit) && !editDinner?.isVariantEdit && (
@@ -1077,7 +1260,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
           </Button>
               <Button 
                 onClick={handleSave} 
-                disabled={(!repeatMealData && !editDinner && !selectedFile) || isSaving || !title.trim() || ((repeatMealData?.action_type === 'new_variant' || editDinner?.isVariantEdit) && !variantTitle.trim()) || (!editDinner?.isDishEdit && !editDinner?.isVariantEdit && !(editDinner && editDinner.count > 1) && !location.trim())}
+                disabled={(!repeatMealData && !editDinner && !selectedFile) || isSaving || isAnalyzing || !title.trim() || ((repeatMealData?.action_type === 'new_variant' || editDinner?.isVariantEdit) && !variantTitle.trim()) || (!editDinner?.isDishEdit && !editDinner?.isVariantEdit && !(editDinner && editDinner.count > 1) && !location.trim())}
               >
                 {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {editDinner?.isDishEdit

@@ -1,5 +1,74 @@
 import EXIF from 'exif-js'
 import { heicTo } from 'heic-to'
+import { IMAGE_CONFIG, shouldCompress, getCompressionInfo } from './imageConfig'
+
+// Image compression utility
+export const compressImage = async (file: File, maxWidth: number = IMAGE_CONFIG.maxWidth, maxHeight: number = IMAGE_CONFIG.maxHeight, quality: number = IMAGE_CONFIG.quality): Promise<File> => {
+  // Skip compression for small files
+  if (!shouldCompress(file)) {
+    console.log('File too small for compression:', file.name, 'size:', Math.round(file.size / 1024) + 'KB')
+    return file
+  }
+
+  return new Promise((resolve, reject) => {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    const img = new Image()
+
+    img.onload = () => {
+      // Calculate new dimensions maintaining aspect ratio
+      let { width, height } = img
+      
+      if (width > maxWidth || height > maxHeight) {
+        const aspectRatio = width / height
+        
+        if (width > height) {
+          width = Math.min(width, maxWidth)
+          height = width / aspectRatio
+        } else {
+          height = Math.min(height, maxHeight)
+          width = height * aspectRatio
+        }
+      }
+
+      // Set canvas dimensions
+      canvas.width = width
+      canvas.height = height
+
+      // Draw and compress
+      ctx?.drawImage(img, 0, 0, width, height)
+      
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), {
+              type: 'image/jpeg',
+              lastModified: Date.now()
+            })
+            
+            const info = getCompressionInfo(file.size, compressedFile.size)
+            console.log('Image compressed:', {
+              file: file.name,
+              originalDimensions: `${img.width}x${img.height}`,
+              compressedDimensions: `${width}x${height}`,
+              quality: quality,
+              ...info
+            })
+            
+            resolve(compressedFile)
+          } else {
+            reject(new Error('Failed to compress image'))
+          }
+        },
+        'image/jpeg',
+        quality
+      )
+    }
+
+    img.onerror = () => reject(new Error('Failed to load image'))
+    img.src = URL.createObjectURL(file)
+  })
+}
 
 export interface ExifData {
   latitude?: number
@@ -56,20 +125,51 @@ export const processFileAndExtractExif = async (file: File): Promise<ProcessedFi
       size: file.size
     })
     
-    // For HEIC files, return original file (preview will use placeholder)
-    // But conversion will happen separately for upload/AI analysis
+    // Convert HEIC to JPEG for preview
+    try {
+      const convertedFile = await convertHeicForPreview(file)
+      if (convertedFile) {
+        console.log('HEIC converted for preview:', {
+          originalSize: file.size,
+          convertedSize: convertedFile.size
+        })
+        
+        // Compress the converted file
+        const compressedFile = await compressImage(convertedFile)
+        return { 
+          file: compressedFile, 
+          exifData: { width: undefined, height: undefined } 
+        }
+      }
+    } catch (error) {
+      console.warn('HEIC conversion failed:', error)
+    }
+    
+    // Fallback: return original file if conversion fails
     return { 
       file: file, 
       exifData: { width: undefined, height: undefined } 
     }
   }
 
-  // For other formats, try to extract EXIF data with fallback
+  // For other formats, compress first then try to extract EXIF data
   try {
-    console.log('Attempting EXIF extraction for:', file.name)
+    console.log('Compressing image:', file.name, 'size:', file.size)
+    const compressedFile = await compressImage(file)
+    console.log('Compression result:', {
+      original: `${Math.round(file.size / 1024)}KB`,
+      compressed: `${Math.round(compressedFile.size / 1024)}KB`,
+      actualCompression: compressedFile.size < file.size ? 'YES' : 'NO'
+    })
+    
+    // Try to extract EXIF data from original file (before compression)
     const exifData = await extractExifDataWithFallback(file)
     console.log('EXIF extraction successful:', exifData)
-    return { file: file, exifData }
+    
+    return { 
+      file: compressedFile, 
+      exifData 
+    }
   } catch (error) {
     console.warn('EXIF extraction failed, using fallback:', error)
     // Return file with empty EXIF data if extraction fails
@@ -144,7 +244,9 @@ export const extractExifData = async (file: File): Promise<ExifData> => {
     }, 2000) // 2 second timeout
     
     try {
-      EXIF.getData(file, function() {
+      // Create object URL for EXIF extraction
+      const objectUrl = URL.createObjectURL(file)
+      EXIF.getData(objectUrl, function() {
         if (resolved) return // Already timed out
         
         try {
@@ -190,12 +292,16 @@ export const extractExifData = async (file: File): Promise<ExifData> => {
                            undefined
           
           clearTimeout(timeout)
+          // Clean up object URL
+          URL.revokeObjectURL(objectUrl)
           resolved = true
           resolve(exifData)
         } catch (error) {
           if (!resolved) {
             console.warn('Error extracting EXIF tags:', error)
             clearTimeout(timeout)
+            // Clean up object URL
+            URL.revokeObjectURL(objectUrl)
             resolved = true
             resolve({ width: undefined, height: undefined })
           }
