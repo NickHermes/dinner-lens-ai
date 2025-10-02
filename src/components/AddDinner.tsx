@@ -90,9 +90,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                         (!editDinner?.isDishEdit && !editDinner?.isVariantEdit && !(editDinner && editDinner.count > 1) && !location.trim()) || 
                         !dinnerDate || 
                         !isValidDate(dinnerDate) ||
-                        !mealType || 
-                        !effort || 
-                        healthScore === null
+                        // Only require mealType, effort, and healthScore for new dishes and dish editing, not variant editing
+                        ((!repeatMealData && !editDinner) || editDinner?.isDishEdit) && (!mealType || !effort || healthScore === null)
 
   // Initialize form based on mode
   useEffect(() => {
