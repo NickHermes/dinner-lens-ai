@@ -69,15 +69,14 @@ export const LocationInput: React.FC<LocationInputProps> = ({
   ).slice(0, 5) // Limit to 5 suggestions
 
   return (
-    <div className="space-y-2 relative">
+    <div className="relative space-y-2">
       {label && (
-        <Label className={showValidationError && required && !value.trim() ? "text-red-500 font-bold" : ""}>
+        <Label className={showValidationError && required && !value.trim() ? "text-orange-500 font-bold" : ""}>
           {label} {required && '*'}
         </Label>
       )}
       
-      <div className="relative">
-        <Input
+      <Input
           ref={inputRef}
           value={inputValue}
           onChange={handleInputChange}
@@ -85,7 +84,7 @@ export const LocationInput: React.FC<LocationInputProps> = ({
           onBlur={handleInputBlur}
           placeholder={placeholder}
           className={cn(
-            showValidationError && required && !value.trim() && "border-red-500",
+            showValidationError && required && !value.trim() && "border-orange-500",
             className
           )}
         />
@@ -100,7 +99,7 @@ export const LocationInput: React.FC<LocationInputProps> = ({
               <button
                 key={location.location}
                 onClick={() => handleSelectLocation(location.location)}
-                className="w-full px-3 py-2 text-left hover:bg-accent hover:text-accent-foreground flex items-center justify-between text-sm"
+                className="w-full px-3 py-2 text-left hover-accent flex items-center justify-between text-sm"
               >
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-muted-foreground" />
@@ -113,11 +112,7 @@ export const LocationInput: React.FC<LocationInputProps> = ({
             ))}
           </div>
         )}
-      </div>
       
-      {showValidationError && required && !value.trim() && (
-        <p className="text-red-500 text-sm">Location is required</p>
-      )}
     </div>
   )
 }

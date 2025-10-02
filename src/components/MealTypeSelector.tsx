@@ -17,6 +17,7 @@ interface PreviousDish {
   location_counts?: { [location: string]: number }
   latest_instance?: DinnerInstance
   selected_variant?: DinnerInstance
+  matchType?: 'title' | 'tag'
 }
 
 interface MealTypeSelectorProps {
@@ -46,7 +47,7 @@ export const MealTypeSelector = ({ isOpen, onClose, onNewDish, onRepeatMeal }: M
     try {
       // Search dishes by title and base tags
       const [dishResults, tagResults] = await Promise.all([
-        // Search dishes by title
+        // Search dishes by title (include dishes with or without tags)
         supabase
           .from('dishes')
           .select(`
@@ -63,17 +64,16 @@ export const MealTypeSelector = ({ isOpen, onClose, onNewDish, onRepeatMeal }: M
               places (name),
               consumption_records (*)
             ),
-            tags!inner (
+            tags (
               name,
               is_base_tag
             )
           `)
           .eq('user_id', user.id)
-          .eq('tags.is_base_tag', true)
           .ilike('title', `%${query}%`)
           .order('updated_at', { ascending: false }),
         
-        // Search dishes by base tags
+        // Search dishes by base tags (only dishes that have matching base tags)
         supabase
           .from('dishes')
           .select(`
@@ -104,44 +104,82 @@ export const MealTypeSelector = ({ isOpen, onClose, onNewDish, onRepeatMeal }: M
       if (dishResults.error) throw dishResults.error
       if (tagResults.error && tagResults.error.code !== 'PGRST116') throw tagResults.error
 
-      // Combine and deduplicate dishes
-      const allDishes = [...(dishResults.data || []), ...(tagResults.data || [])]
-      const uniqueDishes = allDishes.filter((dish, index, self) => 
-        index === self.findIndex(d => d.id === dish.id)
-      )
+      // Process title matches first (prioritize these)
+      const titleMatches: PreviousDish[] = (dishResults.data || []).map(dish => {
+        const instances = dish.dinner_instances || []
+        const latestInstance = instances.sort((a, b) => 
+          new Date(b.datetime).getTime() - new Date(a.datetime).getTime()
+        )[0]
+        
+        // Calculate location counts
+        const locationCounts: { [location: string]: number } = {}
+        const places: string[] = []
+        
+        instances.forEach(inst => {
+          const placeName = inst.places?.name || 'Unknown Location'
+          locationCounts[placeName] = (locationCounts[placeName] || 0) + 1
+          if (!places.includes(placeName)) {
+            places.push(placeName)
+          }
+        })
 
-            // Process results
-            const results: PreviousDish[] = uniqueDishes.map(dish => {
-              const instances = dish.dinner_instances || []
-              const latestInstance = instances.sort((a, b) => 
-                new Date(b.datetime).getTime() - new Date(a.datetime).getTime()
-              )[0]
-              
-              // Calculate location counts
-              const locationCounts: { [location: string]: number } = {}
-              const places: string[] = []
-              
-              instances.forEach(inst => {
-                const placeName = inst.places?.name || 'Unknown Location'
-                locationCounts[placeName] = (locationCounts[placeName] || 0) + 1
-                if (!places.includes(placeName)) {
-                  places.push(placeName)
-                }
-              })
+        return {
+          dish,
+          frequency: instances.length,
+          last_eaten: latestInstance?.datetime || dish.created_at,
+          sample_photo_url: latestInstance?.photo_url || dish.base_photo_url,
+          places,
+          location_counts: locationCounts,
+          latest_instance: latestInstance,
+          matchType: 'title' as const
+        }
+      })
 
-              return {
-                dish,
-                frequency: instances.length,
-                last_eaten: latestInstance?.datetime || dish.created_at,
-                sample_photo_url: latestInstance?.photo_url || dish.base_photo_url,
-                places,
-                location_counts: locationCounts,
-                latest_instance: latestInstance
-              }
-            })
+      // Process tag matches (exclude dishes already found in title matches)
+      const titleMatchIds = new Set(titleMatches.map(match => match.dish.id))
+      const tagMatches: PreviousDish[] = (tagResults.data || [])
+        .filter(dish => !titleMatchIds.has(dish.id))
+        .map(dish => {
+          const instances = dish.dinner_instances || []
+          const latestInstance = instances.sort((a, b) => 
+            new Date(b.datetime).getTime() - new Date(a.datetime).getTime()
+          )[0]
+          
+          // Calculate location counts
+          const locationCounts: { [location: string]: number } = {}
+          const places: string[] = []
+          
+          instances.forEach(inst => {
+            const placeName = inst.places?.name || 'Unknown Location'
+            locationCounts[placeName] = (locationCounts[placeName] || 0) + 1
+            if (!places.includes(placeName)) {
+              places.push(placeName)
+            }
+          })
 
-      // Sort by frequency desc, then by recency
+          return {
+            dish,
+            frequency: instances.length,
+            last_eaten: latestInstance?.datetime || dish.created_at,
+            sample_photo_url: latestInstance?.photo_url || dish.base_photo_url,
+            places,
+            location_counts: locationCounts,
+            latest_instance: latestInstance,
+            matchType: 'tag' as const
+          }
+        })
+
+      // Combine results with title matches first, then tag matches
+      const results = [...titleMatches, ...tagMatches]
+
+      // Sort within each group by frequency desc, then by recency
       results.sort((a, b) => {
+        // First prioritize by match type (title matches first)
+        if (a.matchType !== b.matchType) {
+          return a.matchType === 'title' ? -1 : 1
+        }
+        
+        // Then sort by frequency desc, then by recency
         if (b.frequency !== a.frequency) return b.frequency - a.frequency
         return new Date(b.last_eaten).getTime() - new Date(a.last_eaten).getTime()
       })
@@ -267,7 +305,7 @@ export const MealTypeSelector = ({ isOpen, onClose, onNewDish, onRepeatMeal }: M
                 {searchResults.map((dishResult) => (
                         <Card 
                           key={dishResult.dish.id} 
-                          className="p-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                          className="p-3 cursor-pointer hover-accent"
                           onClick={() => handleDishSelect(dishResult)}
                         >
                     <div className="flex items-center gap-3">
@@ -313,7 +351,7 @@ export const MealTypeSelector = ({ isOpen, onClose, onNewDish, onRepeatMeal }: M
                   variant="default"
                   size="sm"
                   onClick={handleNewDish}
-                  className="bg-orange-600 hover:bg-orange-700"
+                  className="bg-orange-600 hover-destructive"
                 >
                   Add as new dish
                 </Button>
@@ -367,6 +405,12 @@ export const MealTypeSelector = ({ isOpen, onClose, onNewDish, onRepeatMeal }: M
                     {instance.photo_url ? (
                       <img 
                         src={instance.photo_url} 
+                        alt={`${selectedDish.dish.title} variant`}
+                        className="w-12 h-12 rounded-lg object-cover"
+                      />
+                    ) : selectedDish.dish.base_photo_url ? (
+                      <img 
+                        src={selectedDish.dish.base_photo_url} 
                         alt={`${selectedDish.dish.title} variant`}
                         className="w-12 h-12 rounded-lg object-cover"
                       />

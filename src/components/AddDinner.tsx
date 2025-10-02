@@ -61,7 +61,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
   const [location, setLocation] = useState('')
   const [notes, setNotes] = useState('')
   const [dinnerDate, setDinnerDate] = useState('')
-  const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'other'>('dinner')
+  const [mealType, setMealType] = useState<'breakfast' | 'lunch' | 'dinner' | 'other' | null>(null)
   const [effort, setEffort] = useState<'easy' | 'medium' | 'hard' | null>(null)
   const [healthScore, setHealthScore] = useState<number | null>(null)
   const [tags, setTags] = useState<Tag[]>([])
@@ -75,6 +75,24 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
   const [aiAnalysisCompleted, setAiAnalysisCompleted] = useState(false)
   const [showValidationErrors, setShowValidationErrors] = useState(false)
   const [currentLocation, setCurrentLocation] = useState<{latitude: number, longitude: number} | null>(null)
+  
+  // Date validation helper
+  const isValidDate = (dateString: string) => {
+    if (!dateString) return false
+    const date = new Date(dateString)
+    return date instanceof Date && !isNaN(date.getTime())
+  }
+
+  // Global disabled state for save button
+  const isFormDisabled = (!repeatMealData && !editDinner && !selectedFile) || 
+                        !title.trim() || 
+                        ((repeatMealData?.action_type === 'new_variant' || editDinner?.isVariantEdit) && !variantTitle.trim()) || 
+                        (!editDinner?.isDishEdit && !editDinner?.isVariantEdit && !(editDinner && editDinner.count > 1) && !location.trim()) || 
+                        !dinnerDate || 
+                        !isValidDate(dinnerDate) ||
+                        !mealType || 
+                        !effort || 
+                        healthScore === null
 
   // Initialize form based on mode
   useEffect(() => {
@@ -85,7 +103,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
         setVariantTitle(editDinner.variant_title || '')
         setHealthScore(editDinner.health_score || null)
         setEffort(editDinner.effort || null)
-        setMealType(editDinner.meal_type || 'dinner')
+        setMealType(editDinner.meal_type || null)
         setDinnerDate(editDinner.datetime || new Date().toISOString().slice(0, 16))
         setLocation(editDinner.location || '')
         setNotes(editDinner.notes || '')
@@ -158,7 +176,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
     setLocation('')
     setNotes('')
     setDinnerDate(new Date().toISOString().slice(0, 16))
-    setMealType('dinner')
+    setMealType(null)
     setEffort(null)
     setHealthScore(null)
     setTags([])
@@ -296,8 +314,9 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
         setTitle(data.suggested_title)
       }
       if (data.health_score) {
-        console.log('Setting health score to:', data.health_score)
-        setHealthScore(data.health_score)
+        const roundedScore = roundToNearestFive(data.health_score)
+        console.log('Setting health score to:', roundedScore, '(rounded from', data.health_score, ')')
+        setHealthScore(roundedScore)
       }
       if (data.suggested_tags) {
         console.log('Adding tags:', data.suggested_tags)
@@ -333,6 +352,11 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
     // But we can stop the UI from showing the loading state
   }
 
+  // Helper function to round health score to nearest 5%
+  const roundToNearestFive = (score: number): number => {
+    return Math.round(score / 5) * 5
+  }
+
   const addTag = (tagName: string) => {
     const trimmedTag = tagName.trim()
     console.log('Adding tag:', trimmedTag)
@@ -364,31 +388,54 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
     const isDishEdit = editDinner?.isDishEdit
     const isVariantEdit = editDinner?.isVariantEdit
     const isMultiCountVariant = editDinner && editDinner.count > 1
+    const isNewDish = !repeatMealData && !editDinner
+    const isNewVariant = repeatMealData?.action_type === 'new_variant'
     
-    const requireTitle = !(repeatMealData?.action_type === 'log_again')
-    if ((requireTitle && !title.trim()) || ((repeatMealData?.action_type === 'new_variant' || isVariantEdit) && !variantTitle.trim()) || (!isDishEdit && !isVariantEdit && !isMultiCountVariant && !location.trim())) {
-      setShowValidationErrors(true)
-      if (requireTitle && !title.trim()) {
-        toast.error('Please enter a title')
+    // For new dishes and new variants, require all fields except tags and notes
+    if (isNewDish || isNewVariant) {
+      const errors = []
+      
+      if (!title.trim()) errors.push('Please enter a title')
+      if (isNewVariant && !variantTitle.trim()) errors.push('Please enter a variant title')
+      if (!location.trim()) errors.push('Please enter a location')
+      if (!dinnerDate) errors.push('Please select a date')
+      if (dinnerDate && !isValidDate(dinnerDate)) errors.push('Please enter a valid date')
+      if (!effort) errors.push('Please select an effort level')
+      if (healthScore === null) errors.push('Please set a health score')
+      
+      if (errors.length > 0) {
+        setShowValidationErrors(true)
+        toast.error('Please fill out all mandatory fields')
+        return
       }
-      if ((repeatMealData?.action_type === 'new_variant' || isVariantEdit) && !variantTitle.trim()) {
-        toast.error('Please enter a variant title')
+    } else {
+      // For editing and log again, use existing validation
+      const requireTitle = !(repeatMealData?.action_type === 'log_again')
+      if ((requireTitle && !title.trim()) || ((repeatMealData?.action_type === 'new_variant' || isVariantEdit) && !variantTitle.trim()) || (!isDishEdit && !isVariantEdit && !isMultiCountVariant && !location.trim())) {
+        setShowValidationErrors(true)
+        toast.error('Please fill out all mandatory fields')
+        return
       }
-      if (!isDishEdit && !isVariantEdit && !isMultiCountVariant && !location.trim()) {
-        toast.error('Please enter a location')
-      }
-      return
     }
 
     // For brand new dishes (not repeats or edits), require a photo
     if (!repeatMealData && !editDinner && !selectedFile) {
-      toast.error('Please upload a photo for new dishes')
+      setShowValidationErrors(true)
+      toast.error('Please fill out all mandatory fields')
       return
     }
 
     // For dish editing, require a photo selection (either current or variant photo)
     if (isDishEdit && !previewUrl) {
-      toast.error('Please select a photo for the dish')
+      setShowValidationErrors(true)
+      toast.error('Please fill out all mandatory fields')
+      return
+    }
+
+    // For variant editing, require a photo (either uploaded or existing)
+    if (isVariantEdit && !selectedFile && !previewUrl) {
+      setShowValidationErrors(true)
+      toast.error('Please fill out all mandatory fields')
       return
     }
 
@@ -510,6 +557,40 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
           .eq('user_id', user.id)
 
         if (dishUpdateError) throw dishUpdateError
+
+        // If this dish has only one variant and we're updating the photo, 
+        // also update the variant photo to keep them in sync
+        if (selectedPhotoUrl && editDinner.variantPhotos && editDinner.variantPhotos.length <= 1) {
+          console.log('Single variant detected, updating variant photo to match dish photo')
+          
+          // Get the single variant instance
+          const { data: instances, error: instancesError } = await supabase
+            .from('dinner_instances')
+            .select('id')
+            .eq('dish_id', editDinner.id)
+            .eq('user_id', user.id)
+            .limit(1)
+
+          if (instancesError) {
+            console.error('Error fetching instances:', instancesError)
+          } else if (instances && instances.length > 0) {
+            // Update the variant photo
+            const { error: variantUpdateError } = await supabase
+              .from('dinner_instances')
+              .update({
+                photo_url: selectedPhotoUrl,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', instances[0].id)
+              .eq('user_id', user.id)
+
+            if (variantUpdateError) {
+              console.error('Error updating variant photo:', variantUpdateError)
+            } else {
+              console.log('Variant photo updated successfully')
+            }
+          }
+        }
 
         // Update base tags
         if (tags.length > 0) {
@@ -781,7 +862,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
         <DialogHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Camera className="h-5 w-5" />
+          <Camera className="h-5 w-5" />
               <DialogTitle>
                 {editDinner?.isDishEdit 
                   ? `Edit Dish: ${editDinner.title}`
@@ -807,7 +888,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                     window.dispatchEvent(new CustomEvent('showMealTypeSelector'))
                   }, 100)
                 }}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover-white"
               >
                 <ArrowLeft className="h-4 w-4 mr-1" />
                 Back
@@ -878,7 +959,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                     alt="Preview" 
                     className="w-full h-48 object-cover rounded-lg"
                   />
-                  {(repeatMealData?.action_type === 'new_variant' || (!repeatMealData && !editDinner?.isDishEdit)) && !isAnalyzing && (
+                  {(repeatMealData?.action_type === 'new_variant' || (!repeatMealData && !editDinner?.isDishEdit) || 
+                    (editDinner?.isDishEdit && (!editDinner?.variantPhotos || editDinner.variantPhotos.length <= 1))) && !isAnalyzing && (
                     <Button
                       variant="destructive"
                       size="sm"
@@ -910,9 +992,10 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                   </div>
                 </div>
               ) : (
-                // Show placeholder for new dishes and new variants when no photo is selected
-                (!repeatMealData || repeatMealData?.action_type === 'new_variant') && !editDinner?.isDishEdit && (
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                // Show placeholder for new dishes, new variants, and single-variant dish editing
+                (((!repeatMealData || repeatMealData?.action_type === 'new_variant') && !editDinner?.isDishEdit) || 
+                (editDinner?.isDishEdit && (!editDinner?.variantPhotos || editDinner.variantPhotos.length <= 1))) && (
+                  <div className={`border-2 border-dashed rounded-lg p-8 text-center ${showValidationErrors && !selectedFile && !previewUrl ? 'border-orange-500' : 'border-gray-300'}`}>
                     <Camera className="mx-auto h-12 w-12 text-gray-400" />
                     <div className="mt-4">
                       <Button
@@ -927,7 +1010,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                 )
               )}
               
-              {(repeatMealData?.action_type === 'new_variant' || (!repeatMealData && !editDinner?.isDishEdit)) && (
+              {(repeatMealData?.action_type === 'new_variant' || (!repeatMealData && !editDinner?.isDishEdit) || 
+                (editDinner?.isDishEdit && (!editDinner?.variantPhotos || editDinner.variantPhotos.length <= 1))) && (
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -970,13 +1054,13 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
           )}
           </div>
 
-        {/* Form Fields - Show when modal is open */}
-        {open && (
+        {/* Form Fields - Show when photo is uploaded or for repeat meals/editing */}
+        {(hasUploadedPhoto || repeatMealData || editDinner) && (
           <div className={`space-y-6 mt-8 ${isAnalyzing ? 'pointer-events-none opacity-50' : ''}`}>
             {/* Title - hidden for Log Again (shown in header) and new variants (shown in dish info) */}
             {repeatMealData?.action_type !== 'log_again' && repeatMealData?.action_type !== 'new_variant' && (
-          <div>
-                <Label htmlFor="title" className={showValidationErrors && !title.trim() ? "text-red-500 font-bold" : ""}>
+          <div className="space-y-2">
+                <Label htmlFor="title" className={showValidationErrors && !title.trim() ? "text-orange-500 font-bold" : ""}>
                   Title *
                 </Label>
             <Input
@@ -984,7 +1068,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
                   placeholder="What did you eat?"
-                  className={(showValidationErrors && !title.trim() ? "border-red-500 " : "") + "w-[94%] mx-auto sm:w-full"}
+                  className={(showValidationErrors && !title.trim() ? "border-orange-500 " : "") + "w-[94%] mx-auto sm:w-full"}
                   disabled={!!repeatMealData || editDinner?.isVariantEdit}
                 />
               </div>
@@ -1064,7 +1148,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
           {/* Variant Title - Show editable for new variants/variant edit; show read-only for log again */}
           {(repeatMealData?.action_type === 'new_variant' || editDinner?.isVariantEdit) && (
             <div className="space-y-2">
-              <Label htmlFor="variant-title" className={showValidationErrors && !variantTitle.trim() ? "text-red-500 font-bold" : ""}>
+              <Label htmlFor="variant-title" className={showValidationErrors && !variantTitle.trim() ? "text-orange-500 font-bold" : ""}>
                 Variant Title *
               </Label>
               <Input
@@ -1072,7 +1156,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                 value={variantTitle}
                 onChange={(e) => setVariantTitle(e.target.value)}
                 placeholder="e.g., Margherita Pizza, Spicy Chicken, etc."
-                className={(showValidationErrors && !variantTitle.trim() ? "border-red-500 " : "") + "w-[94%] mx-auto sm:w-full"}
+                className={(showValidationErrors && !variantTitle.trim() ? "border-orange-500 " : "") + "w-[94%] mx-auto sm:w-full"}
             />
           </div>
           )}
@@ -1088,8 +1172,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Date/Time - Hide for dish editing, variant editing, and multi-count variant editing */}
               {!editDinner?.isDishEdit && !editDinner?.isVariantEdit && !(editDinner && editDinner.count > 1) && (
-                <div className="min-w-0">
-                  <Label htmlFor="date">Date *</Label>
+                <div className="min-w-0 space-y-2">
+                  <Label htmlFor="date" className={showValidationErrors && (!dinnerDate || !isValidDate(dinnerDate)) ? "text-orange-500 font-bold" : ""}>Date *</Label>
                   <Input
                     id="date"
                     type="date"
@@ -1106,17 +1190,17 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                         setDinnerDate(selectedDate + 'T12:00')
                       }
                     }}
-                    className="h-10 text-base text-left w-[94%] mx-auto sm:w-full"
+                    className={(showValidationErrors && (!dinnerDate || !isValidDate(dinnerDate)) ? "border-orange-500 " : "") + "h-10 text-base text-left w-[94%] mx-auto sm:w-full"}
                   />
                 </div>
               )}
               {/* Meal Type - For new dishes and dish editing only */}
               {(!repeatMealData || editDinner?.isDishEdit) && !editDinner?.isVariantEdit && (
-                <div className="min-w-0">
-                  <Label>Meal Type</Label>
-                  <Select value={mealType} onValueChange={(value: any) => setMealType(value)}>
-                    <SelectTrigger className="w-[94%] mx-auto sm:w-full">
-                      <SelectValue />
+                <div className="min-w-0 space-y-2">
+                  <Label className={showValidationErrors && !mealType ? "text-orange-500 font-bold" : ""}>Meal Type *</Label>
+                  <Select value={mealType || ''} onValueChange={(value: any) => setMealType(value)}>
+                    <SelectTrigger className={(showValidationErrors && !mealType ? "border-orange-500 " : "") + "w-[94%] mx-auto sm:w-full"}>
+                      <SelectValue placeholder="Select meal type" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="breakfast">Breakfast</SelectItem>
@@ -1130,16 +1214,15 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
 
               {/* Location - Hide for dish editing, variant editing, and multi-count variant editing */}
               {!editDinner?.isDishEdit && !editDinner?.isVariantEdit && !(editDinner && editDinner.count > 1) && (
-                <div className="min-w-0">
-                  <Label htmlFor="location" className={showValidationErrors && !location.trim() ? "text-red-500 font-bold" : ""}>
-                    Location *
-                  </Label>
-                  <Input
-                    id="location"
+                <div className="min-w-0 space-y-2">
+                  <LocationInput
                     value={location}
-                    onChange={(e) => setLocation(e.target.value)}
+                    onChange={setLocation}
                     placeholder="Where did you have this? (e.g., Home, Restaurant name)"
-                    className={(showValidationErrors && !location.trim() ? "border-red-500 " : "") + "h-10 text-base w-[94%] mx-auto sm:w-full"}
+                    label="Location"
+                    required={true}
+                    showValidationError={showValidationErrors}
+                    className="h-10 text-base w-[94%] mx-auto sm:w-full"
                   />
                 </div>
               )}
@@ -1147,11 +1230,11 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
 
             {/* Health Score - For new dishes and dish editing only */}
             {(!repeatMealData || editDinner?.isDishEdit) && !editDinner?.isVariantEdit && (
-              <div>
-                <Label>Health Score {healthScore !== null ? `(${healthScore}%)` : ''}</Label>
+              <div className="space-y-2">
+                <Label className={showValidationErrors && healthScore === null ? "text-orange-500 font-bold" : ""}>Health Score * {healthScore !== null ? `(${healthScore}%)` : ''}</Label>
                 <div className="mt-2">
                   <Slider
-                    value={[healthScore || 50]}
+                    value={[healthScore ?? 0]}
                     onValueChange={(values) => setHealthScore(values[0])}
                     max={100}
                     min={0}
@@ -1169,10 +1252,10 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
 
             {/* Effort Level - For new dishes and dish editing only */}
             {(!repeatMealData || editDinner?.isDishEdit) && !editDinner?.isVariantEdit && (
-              <div className="min-w-0">
-                <Label>Effort Level</Label>
+              <div className="min-w-0 space-y-2">
+                <Label className={showValidationErrors && !effort ? "text-orange-500 font-bold" : ""}>Effort Level *</Label>
                 <Select value={effort || ''} onValueChange={(value) => setEffort(value as any)}>
-                  <SelectTrigger className="w-[94%] mx-auto sm:w-full">
+                  <SelectTrigger className={(showValidationErrors && !effort ? "border-orange-500 " : "") + "w-[94%] mx-auto sm:w-full"}>
                     <SelectValue placeholder="How hard was it to make?" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1199,7 +1282,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                         {tag.name}
                         <button
                           onClick={() => removeTag(index)}
-                          className="ml-1 text-xs hover:text-red-500"
+                          className="ml-1 text-xs hover-white"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -1233,7 +1316,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
 
          {/* Notes - Hide for log again mode */}
          {repeatMealData?.action_type !== 'log_again' && (
-          <div>
+          <div className="space-y-2">
              <Label htmlFor="notes">Notes</Label>
             <Textarea
                id="notes"
@@ -1260,7 +1343,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
           </Button>
               <Button 
                 onClick={handleSave} 
-                disabled={(!repeatMealData && !editDinner && !selectedFile) || isSaving || isAnalyzing || !title.trim() || ((repeatMealData?.action_type === 'new_variant' || editDinner?.isVariantEdit) && !variantTitle.trim()) || (!editDinner?.isDishEdit && !editDinner?.isVariantEdit && !(editDinner && editDinner.count > 1) && !location.trim())}
+                disabled={isSaving || isAnalyzing}
+                variant={isFormDisabled ? "disabled" : "default"}
               >
                 {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {editDinner?.isDishEdit

@@ -208,11 +208,10 @@ const Index = () => {
         .from('dishes')
         .select(`
           id, title, health_score, base_photo_url, effort, meal_type, notes, created_at, updated_at,
-          dinner_instances(id, datetime, location, variant_title, notes, photo_url, place_id, count, last_consumed, consumption_records(id)),
-          tags!inner(name, type, is_base_tag)
+          dinner_instances(id, datetime, location, variant_title, notes, photo_url, place_id, count, last_consumed, consumption_records(id, consumed_at)),
+          tags(name, type, is_base_tag)
         `)
         .eq('user_id', user.id)
-        .eq('tags.is_base_tag', true)
         .order('updated_at', { ascending: false })
         .limit(20);
       
@@ -225,6 +224,7 @@ const Index = () => {
       
       // Transform data to include latest instance and total consumption count
       const transformedData = data?.map(dish => {
+        console.log('Processing dish:', dish.title, 'with instances:', dish.dinner_instances?.length);
         const instances = dish.dinner_instances || [];
         const latestInstance = instances.sort((a, b) => 
           new Date(b.datetime).getTime() - new Date(a.datetime).getTime()
@@ -235,14 +235,38 @@ const Index = () => {
           return sum + (instance.consumption_records?.length || 1);
         }, 0);
         
-        return {
+        // Find the most recent consumption record across all instances
+        let mostRecentConsumptionDate = null;
+        instances.forEach(instance => {
+          console.log('Instance:', instance.id, 'has consumption_records:', instance.consumption_records?.length);
+          if (instance.consumption_records && instance.consumption_records.length > 0) {
+            instance.consumption_records.forEach(record => {
+              const recordDate = new Date(record.consumed_at);
+              console.log('Consumption record date:', recordDate, 'from record:', record);
+              if (!mostRecentConsumptionDate || recordDate > mostRecentConsumptionDate) {
+                mostRecentConsumptionDate = recordDate;
+              }
+            });
+          }
+        });
+        
+        const result = {
           ...dish,
           latest_instance: latestInstance,
           total_instances: instances.length, // Keep for backward compatibility
           total_consumption_logs: totalConsumptionLogs, // New field for total logs
-          base_tags: dish.tags?.filter(tag => tag.is_base_tag) || []
+          base_tags: dish.tags?.filter(tag => tag.is_base_tag) || [],
+          // Use most recent consumption record date, fallback to latest instance, then dish creation
+          last_eaten_date: mostRecentConsumptionDate?.toISOString() || latestInstance?.datetime || dish.created_at
         };
+        console.log('Dish result:', dish.title, 'last_eaten_date:', result.last_eaten_date);
+        return result;
       }) || [];
+      
+      // Sort by last eaten date (most recent first)
+      transformedData.sort((a, b) => 
+        new Date(b.last_eaten_date).getTime() - new Date(a.last_eaten_date).getTime()
+      );
       
       console.log('Transformed dishes data:', transformedData);
       
@@ -416,7 +440,7 @@ const Index = () => {
                 {stats?.uniqueDishesByMealType && (
                   <HoverCard openDelay={100} closeDelay={50}>
                     <HoverCardTrigger asChild>
-                      <Info className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-pointer" />
+                      <Info className="h-3 w-3 text-muted-foreground hover-white cursor-pointer" />
                     </HoverCardTrigger>
                     <HoverCardContent className="w-auto p-2">
                       <div className="text-xs space-y-1">
@@ -437,7 +461,7 @@ const Index = () => {
                 {stats?.placesByType && (
                   <HoverCard openDelay={100} closeDelay={50}>
                     <HoverCardTrigger asChild>
-                      <Info className="h-3 w-3 text-muted-foreground hover:text-foreground cursor-pointer" />
+                      <Info className="h-3 w-3 text-muted-foreground hover-white cursor-pointer" />
                     </HoverCardTrigger>
                     <HoverCardContent className="w-auto p-2">
                       <div className="text-xs space-y-1">
@@ -482,7 +506,7 @@ const Index = () => {
                   variant="ghost"
                   size="sm"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover:bg-muted"
+                  className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0 hover-accent"
                 >
                   <X className="h-3 w-3" />
                 </Button>

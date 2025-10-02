@@ -66,6 +66,16 @@ export const DishDetail: React.FC<DishDetailProps> = ({
     }
   }, [dish, isOpen])
 
+  // Reset edit states when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setEditingConsumptionRecord(null)
+      setTempDate('')
+      setTempLocation('')
+      setEditingOriginalInstance(false)
+    }
+  }, [isOpen])
+
   const loadDishDetails = async (preserveSelectedInstanceId?: string) => {
     if (!dish || !user) return
 
@@ -655,7 +665,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
                 size="sm"
                 variant="outline"
                 onClick={onEditDish}
-                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-gray-200 focus:outline-none focus-visible:outline-none px-2 sm:px-3"
+                className="text-blue-600 hover-accent border-gray-200 focus:outline-none focus-visible:outline-none px-2 sm:px-3"
                 aria-label="Edit Dish"
                 title="Edit Dish"
               >
@@ -671,7 +681,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
                   setShowDeleteDishDialog(true)
                   console.log('Set showDeleteDishDialog to true')
                 }}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2 sm:px-3"
+                className="text-red-600 hover-destructive px-2 sm:px-3"
                 aria-label="Delete Dish"
                 title="Delete Dish"
               >
@@ -784,7 +794,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
                       className={`relative flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden border-2 transition-all snap-start ${
                         selectedInstanceId === instance.id 
                           ? 'border-primary shadow-md' 
-                          : 'border-gray-200 hover:border-gray-300'
+                          : 'border-gray-200 hover-accent'
                       }`}
                     >
                       {instance.photo_url ? (
@@ -863,7 +873,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
                             size="sm"
                             variant="outline"
                             onClick={() => setInstanceToDelete(selectedInstance.id)}
-                            className="text-red-600 hover:text-red-700 px-2 sm:px-3"
+                            className="text-red-600 hover-destructive px-2 sm:px-3"
                             aria-label="Delete Variant"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1016,7 +1026,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="text-red-600 hover:text-red-700 h-6 px-2"
+                                    className="text-red-600 hover-destructive h-6 px-2"
                                     onClick={async () => {
                                       await checkCascadeDelete(record.id)
                                       setConsumptionRecordToDelete(record.id)
@@ -1117,7 +1127,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
             <AlertDialogAction 
               onClick={handleDeleteInstanceConfirmed}
               disabled={isDeletingInstance}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-red-600 hover-destructive"
             >
               {isDeletingInstance ? 'Deleting...' : 'Delete Variant'}
             </AlertDialogAction>
@@ -1160,7 +1170,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
             <AlertDialogAction 
               onClick={handleDeleteDishConfirmed}
               disabled={!confirmDeleteAll || isDeletingDish}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-red-600 hover-destructive"
             >
               {isDeletingDish ? 'Deleting...' : 'Delete Everything'}
             </AlertDialogAction>
@@ -1183,7 +1193,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
             <AlertDialogDescription>
               {cascadeDeleteType === 'dish' ? (
                 <>
-                  This will delete the entire dish "{dish?.title}" and ALL of its variants. 
+                  This will permanently delete "{dish?.title}" and ALL of its variants ({instances.reduce((sum, instance) => sum + (instance.consumption_records?.length || 1), 0)} total logs). 
                   This includes all photos, notes, and tags associated with this dish.
                   <br /><br />
                   <strong>This action cannot be undone.</strong>
@@ -1203,15 +1213,32 @@ export const DishDetail: React.FC<DishDetailProps> = ({
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {cascadeDeleteType === 'dish' && (
+            <div className="flex items-center space-x-2 py-4">
+              <Checkbox 
+                id="confirm-delete-all-cascade" 
+                checked={confirmDeleteAll}
+                onCheckedChange={setConfirmDeleteAll}
+              />
+              <label 
+                htmlFor="confirm-delete-all-cascade" 
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              >
+                I understand that this will delete the dish and all {instances.reduce((sum, instance) => sum + (instance.consumption_records?.length || 1), 0)} logs permanently
+              </label>
+            </div>
+          )}
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setConfirmDeleteAll(false)}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleDeleteConsumptionRecord}
-              disabled={isDeletingConsumptionRecord}
-              className="bg-red-600 hover:bg-red-700"
+              disabled={isDeletingConsumptionRecord || (cascadeDeleteType === 'dish' && !confirmDeleteAll)}
+              className="bg-red-600 hover-destructive"
             >
               {isDeletingConsumptionRecord ? 'Deleting...' : 
-               cascadeDeleteType === 'dish' ? 'Delete Dish' :
+               cascadeDeleteType === 'dish' ? 'Delete Everything' :
                cascadeDeleteType === 'variant' ? 'Delete Variant' :
                'Delete Record'}
             </AlertDialogAction>

@@ -133,7 +133,7 @@ const Places = () => {
           {mockPlaces.map((place) => {
             const IconComponent = getPlaceIcon(place.type);
             return (
-              <Card key={place.id} className="overflow-hidden hover:shadow-medium transition-smooth">
+              <Card key={place.id} className="overflow-hidden hover:shadow-medium transition-smooth hover-accent">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">

@@ -38,7 +38,7 @@ export const BottomNavigation = () => {
                   "flex-col gap-2 w-full h-16 px-4 py-3 rounded-lg transition-all duration-200",
                   isActive 
                     ? "text-primary bg-primary/15 shadow-sm" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    : "text-muted-foreground hover-accent"
                 )}
               >
                 <Icon className="h-5 w-5" />

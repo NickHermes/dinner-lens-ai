@@ -21,6 +21,7 @@ const buttonVariants = cva(
         hero: "bg-primary text-primary-foreground hover:bg-primary-hover shadow-glow hover:shadow-strong border-2 border-primary-foreground/20",
         fab: "bg-primary text-primary-foreground hover:bg-primary-hover rounded-full shadow-glow hover:shadow-strong hover:scale-105",
         filter: "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground border border-border rounded-full",
+        disabled: "bg-muted text-muted-foreground shadow-soft hover:bg-muted hover:text-muted-foreground",
       },
       size: {
         default: "h-10 px-4 py-2",
