@@ -40,7 +40,7 @@ CREATE TABLE public.dishes (
     base_photo_url TEXT,
     health_score INTEGER CHECK (health_score >= 0 AND health_score <= 100),
     effort TEXT CHECK (effort IN ('easy', 'medium', 'hard')),
-    meal_type TEXT CHECK (meal_type IN ('breakfast', 'lunch', 'dinner', 'other')) DEFAULT 'dinner',
+    meal_type TEXT CHECK (me al_type IN ('breakfast', 'lunch', 'dinner', 'other')) DEFAULT 'dinner',
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
