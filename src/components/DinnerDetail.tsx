@@ -133,7 +133,7 @@ export const DinnerDetail: React.FC<DinnerDetailProps> = ({
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction 
                     onClick={handleDelete}
-                    className="bg-red-600 hover:bg-red-700"
+                    className="bg-red-600 hover-destructive"
                   >
                     Delete
                   </AlertDialogAction>

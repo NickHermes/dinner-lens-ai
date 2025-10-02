@@ -9,6 +9,7 @@ interface DishCardProps {
     latest_instance?: DinnerInstance
     total_instances?: number
     total_consumption_logs?: number
+    last_eaten_date?: string
   }
   onClick: () => void
 }
@@ -16,12 +17,17 @@ interface DishCardProps {
 export const DishCard: React.FC<DishCardProps> = ({ dish, onClick }) => {
   const latestInstance = dish.latest_instance
   const photoUrl = dish.base_photo_url
-  const lastEaten = latestInstance?.datetime ? new Date(latestInstance.datetime) : new Date(dish.created_at)
+  const lastEaten = dish.last_eaten_date ? new Date(dish.last_eaten_date) : (latestInstance?.datetime ? new Date(latestInstance.datetime) : new Date(dish.created_at))
   const totalConsumptionLogs = dish.total_consumption_logs || 1
 
   const formatDate = (date: Date) => {
     const now = new Date()
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
+    
+    // Normalize both dates to start of day in local timezone for accurate day comparison
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const targetDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    
+    const diffDays = Math.floor((today.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24))
 
     if (diffDays === 0) return 'Today'
     if (diffDays === 1) return 'Yesterday'
