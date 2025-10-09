@@ -5,6 +5,9 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BottomNavigation } from "@/components/BottomNavigation";
+import { TimeRangePicker, useTimeRangeController } from "@/components/TimeRangePicker";
+import type { TimeRangeType } from "@/hooks/useTimeRange";
+import { useKpis, useTopTags } from "@/hooks/useInsights";
 
 // Mock insights data
 const insights = {
@@ -74,6 +77,9 @@ const StatCard = ({ title, value, subtitle, icon: Icon, trend }: {
 );
 
 const Insights = () => {
+  const { range, setType } = useTimeRangeController("month");
+  const { data: kpis } = useKpis(range.start, range.end);
+  const { data: topTags } = useTopTags(range.start, range.end, 10);
   return (
     <div className="min-h-screen bg-gradient-background pb-24">
       {/* Header */}
@@ -81,48 +87,43 @@ const Insights = () => {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-foreground">Insights</h1>
-            <Badge variant="secondary">January 2024</Badge>
           </div>
         </div>
       </header>
 
       <div className="p-4 space-y-6">
-        {/* Time Period Tabs */}
-        <Tabs defaultValue="month" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="week">This Week</TabsTrigger>
-            <TabsTrigger value="month">This Month</TabsTrigger>
-            <TabsTrigger value="year">This Year</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="month" className="space-y-6 mt-6">
-            {/* Key Stats Grid */}
+        {/* Time Range Picker */}
+        <TimeRangePicker value={range.type} onChange={(v: TimeRangeType) => setType(v)} />
+        
+        {/* Main Content */}
+        <div className="space-y-6">
+            {/* Key Stats Grid (live when RPC exists, else fallback to mock) */}
             <div className="grid grid-cols-2 gap-4">
               <StatCard
                 title="Total Dinners"
-                value={insights.thisMonth.totalDinners}
-                subtitle="vs 28 last month"
+                value={kpis?.total_meals ?? insights.thisMonth.totalDinners}
+                subtitle={`${kpis?.unique_dishes ?? 0} unique dishes`}
                 icon={Utensils}
-                trend="down"
+                trend="neutral"
               />
               <StatCard
-                title="Current Streak"
-                value={`${insights.thisMonth.streak} days`}
-                subtitle="Keep it up!"
+                title="Total Dishes"
+                value={kpis?.unique_dishes ?? 0}
+                subtitle={`${Math.round((kpis?.new_ratio ?? 0) * 100)}% new`}
                 icon={Award}
                 trend="up"
               />
               <StatCard
-                title="Diversity Score"
-                value={`${Math.round(insights.thisMonth.diversityScore * 100)}%`}
-                subtitle="Great variety!"
+                title="New Ratio"
+                value={`${Math.round((kpis?.new_ratio ?? 0) * 100)}%`}
+                subtitle="New vs repeat dishes"
                 icon={Target}
                 trend="up"
               />
               <StatCard
                 title="Health Score"
-                value={insights.thisMonth.healthScore}
-                subtitle="Above average"
+                value={kpis?.avg_health ? Math.round(kpis.avg_health) : 'N/A'}
+                subtitle={kpis?.avg_effort ? `Avg: ${kpis.avg_effort}` : 'No data'}
                 icon={TrendingUp}
                 trend="up"
               />
@@ -256,22 +257,7 @@ const Insights = () => {
                 Export Data
               </Button>
             </div>
-          </TabsContent>
-
-          <TabsContent value="week">
-            <Card className="p-8 text-center">
-              <TrendingUp className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">Weekly insights coming soon</p>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="year">
-            <Card className="p-8 text-center">
-              <TrendingUp className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground">Yearly insights coming soon</p>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        </div>
       </div>
       
       <BottomNavigation />
