@@ -73,6 +73,9 @@ export function useKpis(start: Date, end: Date) {
     };
   }, [start.getTime(), end.getTime()]);
 
+  return { data, loading, error };
+}
+
 export interface TagFrequency {
   tag: string;
   freq: number;
@@ -120,6 +123,9 @@ export function useTopTags(start: Date, end: Date, limit: number = 20) {
       isMounted = false;
     };
   }, [start.getTime(), end.getTime(), limit]);
+
+  return { data, loading, error };
+}
 
 export interface TrendData {
   bucket_date: string;
