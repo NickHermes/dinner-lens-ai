@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BottomNavigation } from "@/components/BottomNavigation";
 import { TimeRangePicker, useTimeRangeController } from "@/components/TimeRangePicker";
 import type { TimeRangeType } from "@/hooks/useTimeRange";
-import { useKpis, useTopTags } from "@/hooks/useInsights";
+import { useKpis, useTopTags, useTrends } from "@/hooks/useInsights";
 
 // Mock insights data
 const insights = {
@@ -80,6 +80,7 @@ const Insights = () => {
   const { range, setType } = useTimeRangeController("month");
   const { data: kpis } = useKpis(range.start, range.end);
   const { data: topTags } = useTopTags(range.start, range.end, 10);
+  const { data: trends } = useTrends(range.start, range.end, 'day');
   return (
     <div className="min-h-screen bg-gradient-background pb-24">
       {/* Header */}
@@ -182,69 +183,95 @@ const Insights = () => {
               </CardContent>
             </Card>
 
-            {/* Top Ingredients */}
+            {/* Top Ingredients - Real Data */}
             <Card>
               <CardHeader>
                 <CardTitle>Popular Ingredients</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {insights.topIngredients.map((ingredient, index) => (
-                  <div key={ingredient.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="w-6 h-6 rounded-full p-0 flex items-center justify-center">
-                        {index + 1}
-                      </Badge>
-                      <span className="text-sm font-medium">{ingredient.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 bg-muted rounded-full h-2 overflow-hidden">
-                        <div 
-                          className="h-full bg-secondary transition-all"
-                          style={{ width: `${ingredient.percentage}%` }}
-                        />
+                {topTags && topTags.length > 0 ? (
+                  topTags.map((ingredient, index) => {
+                    const maxFreq = Math.max(...topTags.map(t => t.freq));
+                    const percentage = maxFreq > 0 ? (ingredient.freq / maxFreq) * 100 : 0;
+                    
+                    return (
+                      <div key={ingredient.tag} className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="w-6 h-6 rounded-full p-0 flex items-center justify-center">
+                            {index + 1}
+                          </Badge>
+                          <span className="text-sm font-medium capitalize">{ingredient.tag}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 bg-muted rounded-full h-2 overflow-hidden">
+                            <div 
+                              className="h-full bg-secondary transition-all"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <Badge variant="secondary" className="text-xs">
+                            {ingredient.freq}
+                          </Badge>
+                        </div>
                       </div>
-                      <Badge variant="secondary" className="text-xs">
-                        {ingredient.count}
-                      </Badge>
-                    </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Utensils className="h-8 w-8 mx-auto mb-2" />
+                    <p>No ingredient data available</p>
                   </div>
-                ))}
+                )}
               </CardContent>
             </Card>
 
-            {/* Weekly Trend */}
+            {/* Health & Effort Trends - Real Data */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Weekly Breakdown
+                  <TrendingUp className="h-5 w-5" />
+                  Health & Effort Trends
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {insights.weeklyTrend.map((week) => (
-                  <div key={week.week} className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-medium">{week.week}</span>
-                      <Badge variant="outline">{week.dinners} dinners</Badge>
+                {trends && trends.length > 0 ? (
+                  trends.slice(0, 7).map((trend) => (
+                    <div key={trend.bucket_date} className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-medium">
+                          {new Date(trend.bucket_date).toLocaleDateString()}
+                        </span>
+                        <div className="flex gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            Health: {trend.avg_health ? Math.round(trend.avg_health) : 'N/A'}
+                          </Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            {trend.meals} meals
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
+                          <div 
+                            className="h-full bg-primary transition-all"
+                            style={{ 
+                              width: `${trend.avg_health ? (trend.avg_health / 100) * 100 : 0}%` 
+                            }}
+                            title={`Health Score: ${trend.avg_health ? Math.round(trend.avg_health) : 'N/A'}`}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground capitalize">
+                          {trend.effort_mode || 'N/A'}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex gap-1 h-2">
-                      <div 
-                        className="bg-primary rounded"
-                        style={{ flex: week.home }}
-                        title={`${week.home} home meals`}
-                      />
-                      <div 
-                        className="bg-secondary rounded"
-                        style={{ flex: week.out }}
-                        title={`${week.out} restaurant meals`}
-                      />
-                    </div>
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>{week.home} home</span>
-                      <span>{week.out} out</span>
-                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <TrendingUp className="h-8 w-8 mx-auto mb-2" />
+                    <p>No trend data available</p>
                   </div>
-                ))}
+                )}
               </CardContent>
             </Card>
 

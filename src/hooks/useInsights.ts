@@ -121,6 +121,56 @@ export function useTopTags(start: Date, end: Date, limit: number = 20) {
     };
   }, [start.getTime(), end.getTime(), limit]);
 
+export interface TrendData {
+  bucket_date: string;
+  avg_health: number;
+  effort_mode: string;
+  meals: number;
+}
+
+export function useTrends(start: Date, end: Date, bucket: string = 'day') {
+  const [data, setData] = useState<TrendData[] | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        console.log('🔍 Calling get_trends with:', {
+          p_start: start.toISOString(),
+          p_end: end.toISOString(),
+          p_bucket: bucket
+        });
+        
+        const { data, error } = await supabase.rpc("get_trends", {
+          p_start: start.toISOString(),
+          p_end: end.toISOString(),
+          p_bucket: bucket,
+        });
+        
+        console.log('📊 Trends Response:', { data, error });
+        
+        if (error) throw error;
+        if (isMounted) setData(data as TrendData[]);
+      } catch (e: any) {
+        console.error('❌ Trends Error:', e);
+        if (isMounted) {
+          setData([]);
+          setError(e?.message ?? "Failed to load trends");
+        }
+      } finally {
+        isMounted && setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, [start.getTime(), end.getTime(), bucket]);
+
   return { data, loading, error };
 }
 
