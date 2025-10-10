@@ -180,4 +180,55 @@ export function useTrends(start: Date, end: Date, bucket: string = 'day') {
   return { data, loading, error };
 }
 
+export interface CuisineFrequency {
+  cuisine: string;
+  freq: number;
+}
+
+export function useTopCuisines(start: Date, end: Date, limit: number = 10) {
+  const [data, setData] = useState<CuisineFrequency[] | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        console.log('🔍 Calling get_top_cuisines with:', {
+          p_start: start.toISOString(),
+          p_end: end.toISOString(),
+          p_limit: limit
+        });
+        
+        const { data, error } = await supabase.rpc("get_top_cuisines", {
+          p_start: start.toISOString(),
+          p_end: end.toISOString(),
+          p_limit: limit,
+        });
+        
+        console.log('📊 Top Cuisines Response:', { data, error });
+        
+        if (error) throw error;
+        if (isMounted) setData(data as CuisineFrequency[]);
+      } catch (e: any) {
+        console.error('❌ Top Cuisines Error:', e);
+        if (isMounted) {
+          setData([]);
+          setError(e?.message ?? "Failed to load top cuisines");
+        }
+      } finally {
+        isMounted && setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, [start.getTime(), end.getTime(), limit]);
+
+  return { data, loading, error };
+}
+
 
