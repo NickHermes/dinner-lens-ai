@@ -6,7 +6,6 @@ import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/contexts/AuthContext'
 import { Loader2, Camera } from 'lucide-react'
-import { toast } from 'sonner'
 
 export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading, signIn, signUp, signInAnonymously } = useAuth()
@@ -36,9 +35,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
     const { error } = await signIn(email, password)
     
     if (error) {
-      toast.error(error.message)
-    } else {
-      toast.success('Welcome back!')
+      console.error('Sign in error:', error.message)
     }
     
     setIsLoading(false)
@@ -51,9 +48,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
     const { error } = await signUp(email, password)
     
     if (error) {
-      toast.error(error.message)
-    } else {
-      toast.success('Account created! Check your email to confirm.')
+      console.error('Sign up error:', error.message)
     }
     
     setIsLoading(false)
@@ -65,9 +60,7 @@ export const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) 
     const { error } = await signInAnonymously()
     
     if (error) {
-      toast.error(error.message)
-    } else {
-      toast.success('Welcome! You can start capturing dinners right away.')
+      console.error('Anonymous sign in error:', error.message)
     }
     
     setIsLoading(false)

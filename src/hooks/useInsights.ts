@@ -231,4 +231,99 @@ export function useTopCuisines(start: Date, end: Date, limit: number = 10) {
   return { data, loading, error };
 }
 
+// Dish of the Day
+export interface DishOfDay {
+  dish_id: string;
+  dish_title: string;
+  top_variant: string | null;
+  last_eaten: string | null;
+  score: number | null;
+  photo_url?: string | null;
+}
+
+export function useDishOfDay(date: Date, _cooldownDays: number = 14) {
+  const [data, setData] = useState<DishOfDay | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data, error } = await supabase.rpc("get_dish_of_day", {
+          p_date: date.toISOString().slice(0, 10),
+          p_top_k: 5,
+        });
+        if (error) throw error;
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row && (row as any).score !== undefined) {
+          console.log('DishOfDay score:', (row as any).score);
+        }
+        if (isMounted) setData((row || null) as DishOfDay | null);
+      } catch (e: any) {
+        if (isMounted) {
+          setData(null);
+          setError(e?.message ?? "Failed to load dish of the day");
+        }
+      } finally {
+        isMounted && setLoading(false);
+      }
+    }
+    load();
+    return () => { isMounted = false; };
+  }, [date.toDateString()]);
+
+  return { data, loading, error };
+}
+
+// Cooldown Suggestions
+export interface CooldownSuggestion {
+  dish_id: string;
+  dish_title: string;
+  last_eaten: string | null;
+  times_90d: number;
+}
+
+export function useCooldownSuggestions(cooldownDays: number = 14, limit: number = 20, filters?: {
+  mealType?: string | null;
+  minHealth?: number | null;
+  maxEffort?: string | null;
+}) {
+  const [data, setData] = useState<CooldownSuggestion[] | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data, error } = await supabase.rpc("get_cooldown_suggestions", {
+          p_cooldown_days: cooldownDays,
+          p_limit: limit,
+          p_meal_type: filters?.mealType ?? null,
+          p_min_health: filters?.minHealth ?? null,
+          p_max_effort: filters?.maxEffort ?? null,
+        });
+        if (error) throw error;
+        if (isMounted) setData((data || []) as CooldownSuggestion[]);
+      } catch (e: any) {
+        if (isMounted) {
+          setData([]);
+          setError(e?.message ?? "Failed to load cooldown suggestions");
+        }
+      } finally {
+        isMounted && setLoading(false);
+      }
+    }
+    load();
+    return () => { isMounted = false; };
+  }, [cooldownDays, limit, filters?.mealType ?? '', filters?.minHealth ?? '', filters?.maxEffort ?? '']);
+
+  return { data, loading, error };
+}
+
 

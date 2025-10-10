@@ -222,6 +222,25 @@ const Index = () => {
       
       console.log('Raw dishes data:', data);
       
+      // Attach variant-level tags to instances
+      const allInstanceIds = (data || []).flatMap((dish: any) => (dish.dinner_instances || []).map((i: any) => i.id))
+      if (allInstanceIds.length > 0) {
+        const { data: instanceTags } = await supabase
+          .from('tags')
+          .select('instance_id, name, is_base_tag')
+          .in('instance_id', allInstanceIds)
+        const map: Record<string, any[]> = {}
+        ;(instanceTags || []).forEach((t: any) => {
+          if (!map[t.instance_id]) map[t.instance_id] = []
+          map[t.instance_id].push({ name: t.name, is_base_tag: !!t.is_base_tag })
+        })
+        ;(data || []).forEach((dish: any) => {
+          (dish.dinner_instances || []).forEach((inst: any) => {
+            inst.tags = map[inst.id] || []
+          })
+        })
+      }
+
       // Transform data to include latest instance and total consumption count
       const transformedData = data?.map(dish => {
         console.log('Processing dish:', dish.title, 'with instances:', dish.dinner_instances?.length);
@@ -300,7 +319,10 @@ const Index = () => {
         if (instance.variant_title?.toLowerCase().includes(query)) {
           return true;
         }
-        
+        // Search in variant tags
+        if (instance.tags && instance.tags.some((t: any) => (t.name || '').toLowerCase().includes(query))) {
+          return true;
+        }
         return false;
       })) {
         return true;
