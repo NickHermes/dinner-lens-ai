@@ -1,4 +1,4 @@
-import { Camera, MapPin, TrendingUp } from "lucide-react";
+import { Camera, MapPin, TrendingUp, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,11 @@ export const BottomNavigation = () => {
       path: "/",
       icon: Camera,
       label: "Gallery",
+    },
+    {
+      path: "/inspiration",
+      icon: Sparkles,
+      label: "Inspiration",
     },
     {
       path: "/places", 

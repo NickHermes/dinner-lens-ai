@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AuthGate } from "@/components/AuthGate";
 import Index from "./pages/Index";
 import Places from "./pages/Places";
+import Inspiration from "./pages/Inspiration";
 import Insights from "./pages/Insights";
 import NotFound from "./pages/NotFound";
 import SupabaseTest from "./components/SupabaseTest";
@@ -27,6 +28,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/places" element={<Places />} />
+              <Route path="/inspiration" element={<Inspiration />} />
               <Route path="/insights" element={<Insights />} />
 
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

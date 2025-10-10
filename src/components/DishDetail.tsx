@@ -126,16 +126,22 @@ export const DishDetail: React.FC<DishDetailProps> = ({
       setBaseTags(baseTagsData || [])
       setDishNotes(dishData?.notes || '')
       
-      // Select the most recent instance by default, or preserve the current selection if specified
+      // Select the most recently logged instance by default (by last_consumed fallback datetime),
+      // or preserve the current selection if specified
       if (instancesData && instancesData.length > 0) {
         if (preserveSelectedInstanceId && instancesData.some(instance => instance.id === preserveSelectedInstanceId)) {
           // Preserve the current selection if it still exists
           console.log('Preserving selected instance:', preserveSelectedInstanceId)
           setSelectedInstanceId(preserveSelectedInstanceId)
         } else {
-          // Default to the most recent instance
-          console.log('Setting selected instance to most recent:', instancesData[0].id)
-          setSelectedInstanceId(instancesData[0].id)
+          // Find max by (last_consumed || datetime)
+          const mostRecent = [...instancesData].reduce((best, curr) => {
+            const bestDate = new Date(best.last_consumed || best.datetime).getTime()
+            const currDate = new Date(curr.last_consumed || curr.datetime).getTime()
+            return currDate > bestDate ? curr : best
+          }, instancesData[0])
+          console.log('Setting selected instance to most recently logged:', mostRecent.id)
+          setSelectedInstanceId(mostRecent.id)
         }
       } else {
         console.log('No instances found for dish:', dish.id)

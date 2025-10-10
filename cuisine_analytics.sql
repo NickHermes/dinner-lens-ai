@@ -170,7 +170,7 @@ AS $$
     ('El Salvador', 'Salvadoran', ARRAY['el salvador', 'salvadoran']),
     ('Grenada', 'Grenadian', ARRAY['grenada', 'grenadian']),
     ('Guatemala', 'Guatemalan', ARRAY['guatemala', 'guatemalan']),
-    ('Guyana', 'Guyanese', ARRAY['guyana', 'guyanese']),
+    ('Guyana', 'Guyanese', ARRAY['guyana', 'xguyanese']),
     ('Haiti', 'Haitian', ARRAY['haiti', 'haitian']),
     ('Honduras', 'Honduran', ARRAY['honduras', 'honduran']),
     ('Jamaica', 'Jamaican', ARRAY['jamaica', 'jamaican']),

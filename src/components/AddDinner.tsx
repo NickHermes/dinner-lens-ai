@@ -14,6 +14,7 @@ import { processFileAndExtractExif, extractExifData } from '@/lib/exif'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { LocationInput } from '@/components/LocationInput'
+import { useQuery } from '@tanstack/react-query'
 
 interface PreviousDish {
   dish: Dish
@@ -66,6 +67,49 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
   const [healthScore, setHealthScore] = useState<number | null>(null)
   const [tags, setTags] = useState<Tag[]>([])
   const [newTagInput, setNewTagInput] = useState('')
+  const [baseDishTagNames, setBaseDishTagNames] = useState<string[]>([])
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false)
+  // Load user's historical tags for suggestions
+  const { data: historicalTags = [] } = useQuery({
+    queryKey: ['historical-tags', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      if (!user) return [] as string[]
+      // Fetch user's dish and instance IDs
+      const [{ data: dishRows, error: dishErr }, { data: instRows, error: instErr }] = await Promise.all([
+        supabase.from('dishes').select('id').eq('user_id', user.id),
+        supabase.from('dinner_instances').select('id').eq('user_id', user.id),
+      ])
+      if (dishErr) throw dishErr
+      if (instErr) throw instErr
+
+      const dishIds = (dishRows || []).map((d: any) => d.id)
+      const instanceIds = (instRows || []).map((i: any) => i.id)
+
+      const tagPromises: Promise<any>[] = []
+      if (dishIds.length > 0) {
+        tagPromises.push(
+          supabase.from('tags').select('name').in('dish_id', dishIds)
+        )
+      }
+      if (instanceIds.length > 0) {
+        tagPromises.push(
+          supabase.from('tags').select('name').in('instance_id', instanceIds)
+        )
+      }
+
+      if (tagPromises.length === 0) return [] as string[]
+      const tagResults = await Promise.all(tagPromises)
+      const tagRows = tagResults.flatMap(r => (r.data || []))
+      const unique = Array.from(new Set(tagRows.map((t: any) => (t.name || '').toLowerCase().trim()).filter(Boolean)))
+      return unique
+    }
+  })
+
+  const filteredTagSuggestions = historicalTags
+    .filter((t: string) => newTagInput.trim() && t.includes(newTagInput.toLowerCase().trim()))
+    .filter((t: string) => !tags.some(existing => existing.name.toLowerCase() === t))
+    .slice(0, 6)
   
   // UI state
   const [isSaving, setIsSaving] = useState(false)
@@ -107,6 +151,27 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
         setLocation(editDinner.location || '')
         setNotes(editDinner.notes || '')
         setTags(editDinner.tags || [])
+        // Load base (dish-level) tags when editing a variant to prevent duplicates
+        if (editDinner?.isVariantEdit && editDinner.id) {
+          ;(async () => {
+            try {
+              const { data: inst, error: instErr } = await supabase
+                .from('dinner_instances')
+                .select('dish_id')
+                .eq('id', editDinner.id)
+                .eq('user_id', user?.id || '')
+                .single()
+              if (!instErr && inst?.dish_id) {
+                const { data: baseTags } = await supabase
+                  .from('tags')
+                  .select('name')
+                  .eq('dish_id', inst.dish_id)
+                  .eq('is_base_tag', true)
+                setBaseDishTagNames(Array.from(new Set((baseTags || []).map((t: any) => (t.name || '').toLowerCase()))))
+              }
+            } catch (_) {}
+          })()
+        }
         
         // Handle photo
         if (editDinner.photos && editDinner.photos.length > 0) {
@@ -153,6 +218,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
         }
         
         setTags([]) // Start fresh - user can add instance-specific tags
+        setBaseDishTagNames(Array.from(new Set((repeatMealData.dish.tags || []).map((t: any) => (t.name || '').toLowerCase()))))
         if (!repeatMealData.selected_variant || repeatMealData.action_type !== 'log_again') {
           setHasUploadedPhoto(true) // Show attributes immediately for new variants
         }
@@ -362,9 +428,17 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
     console.log('Current tags:', tags)
     console.log('Tag comparison:', tags.some(tag => tag.name.toLowerCase() === trimmedTag.toLowerCase()))
     
-    if (trimmedTag && !tags.some(tag => tag.name.toLowerCase() === trimmedTag.toLowerCase())) {
+    const lower = trimmedTag.toLowerCase()
+    const isVariantContext = !!repeatMealData || editDinner?.isVariantEdit
+    if (isVariantContext && baseDishTagNames.includes(lower)) {
+      toast.info(`"${trimmedTag}" already included on dish level`)
+      setNewTagInput('')
+      return
+    }
+
+    if (trimmedTag && !tags.some(tag => tag.name.toLowerCase() === lower)) {
       setTags(prev => [...prev, {
-        name: trimmedTag.toLowerCase(),
+        name: lower,
         type: 'custom',
         source: 'user',
         is_base_tag: !repeatMealData // Base tags for new dishes, instance tags for repeats
@@ -1056,8 +1130,8 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
         {/* Form Fields - Show when photo is uploaded or for repeat meals/editing */}
         {(hasUploadedPhoto || repeatMealData || editDinner) && (
           <div className={`space-y-6 mt-8 ${isAnalyzing ? 'pointer-events-none opacity-50' : ''}`}>
-            {/* Title - hidden for Log Again (shown in header) and new variants (shown in dish info) */}
-            {repeatMealData?.action_type !== 'log_again' && repeatMealData?.action_type !== 'new_variant' && (
+            {/* Title - hidden for Log Again, new variants, and variant editing */}
+            {repeatMealData?.action_type !== 'log_again' && repeatMealData?.action_type !== 'new_variant' && !editDinner?.isVariantEdit && (
           <div className="space-y-2">
                 <Label htmlFor="title" className={showValidationErrors && !title.trim() ? "text-orange-500 font-bold" : ""}>
                   Title *
@@ -1068,40 +1142,40 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
               onChange={(e) => setTitle(e.target.value)}
                   placeholder="What did you eat?"
                   className={(showValidationErrors && !title.trim() ? "border-orange-500 " : "") + "w-[94%] mx-auto sm:w-full"}
-                  disabled={!!repeatMealData || editDinner?.isVariantEdit}
+                  disabled={!!repeatMealData}
                 />
               </div>
             )}
 
-          {/* Dish Information - Show for new variants */}
-          {repeatMealData?.action_type === 'new_variant' && (
+          {/* Dish Information - Show for new variants and variant editing (read-only) */}
+          {(repeatMealData?.action_type === 'new_variant' || editDinner?.isVariantEdit) && (
             <div className="space-y-6 p-6 bg-muted/30 rounded-lg border">
               <h3 className="text-base font-semibold text-muted-foreground">Dish Information</h3>
               
               {/* Dish Title and Image */}
               <div className="flex items-center space-x-4">
-                {repeatMealData.dish.photos?.[0]?.url && (
+                {(repeatMealData?.dish?.photos?.[0]?.url || editDinner?.photos?.[0]?.url) && (
                   <img 
-                    src={repeatMealData.dish.photos[0].url} 
-                    alt={repeatMealData.dish.title}
+                    src={(repeatMealData?.dish?.photos?.[0]?.url || editDinner?.photos?.[0]?.url) as string}
+                    alt={(repeatMealData?.dish?.title || editDinner?.title) as string}
                     className="w-20 h-20 object-cover rounded-lg"
                   />
                 )}
                 <div className="flex-1">
-                  <p className="font-semibold text-xl">{repeatMealData.dish.title}</p>
+                  <p className="font-semibold text-xl">{repeatMealData?.dish?.title || editDinner?.title}</p>
                 </div>
               </div>
 
               {/* Health Score */}
-              {repeatMealData.dish.health_score !== null && (
+              {(repeatMealData?.dish?.health_score !== null || editDinner?.health_score !== null) && (
                 <div className="space-y-3">
                   <Label className="text-sm font-medium">Health Score</Label>
                   <div className="flex items-center space-x-4">
-                    <span className="text-base font-medium min-w-[3rem]">{repeatMealData.dish.health_score}%</span>
+                    <span className="text-base font-medium min-w-[3rem]">{(repeatMealData?.dish?.health_score ?? editDinner?.health_score) as number}%</span>
                     <div className="flex-1 bg-muted rounded-full h-3">
                       <div 
                         className="bg-primary h-3 rounded-full" 
-                        style={{ width: `${repeatMealData.dish.health_score}%` }}
+                        style={{ width: `${(repeatMealData?.dish?.health_score ?? editDinner?.health_score) as number}%` }}
                       />
                     </div>
                   </div>
@@ -1110,34 +1184,43 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
 
               {/* Effort Level and Meal Type in a row */}
               <div className="flex items-center space-x-8">
-                {repeatMealData.dish.effort && (
+                {(repeatMealData?.dish?.effort || editDinner?.effort) && (
                   <div className="flex items-center space-x-2">
                     <Label className="text-sm font-medium text-gray-700">Effort Level</Label>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
-                      {repeatMealData.dish.effort} effort
+                      {(repeatMealData?.dish?.effort || editDinner?.effort) as string} effort
                     </span>
                   </div>
                 )}
-                {repeatMealData.dish.meal_type && (
+                {(repeatMealData?.dish?.meal_type || editDinner?.meal_type) && (
                   <div className="flex items-center space-x-2">
                     <Label className="text-sm font-medium text-gray-700">Meal Type</Label>
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
-                      {repeatMealData.dish.meal_type}
+                      {(repeatMealData?.dish?.meal_type || editDinner?.meal_type) as string}
                     </span>
                   </div>
                 )}
               </div>
 
               {/* Base Tags */}
-              {repeatMealData.dish.tags && repeatMealData.dish.tags.length > 0 && (
+              {(
+                (repeatMealData?.dish?.tags && repeatMealData.dish.tags.length > 0) ||
+                (editDinner?.isVariantEdit && baseDishTagNames.length > 0)
+              ) && (
                 <div className="flex items-center space-x-2">
                   <Label className="text-sm font-medium text-gray-700">Base Tags</Label>
                   <div className="flex flex-wrap gap-1">
-                    {repeatMealData.dish.tags.map((tag, index) => (
-                      <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
-                        {tag.name}
-                      </span>
-                    ))}
+                    {repeatMealData?.dish?.tags
+                      ? repeatMealData.dish.tags.map((tag: any, index: number) => (
+                          <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                            {tag.name}
+                          </span>
+                        ))
+                      : baseDishTagNames.map((name: string, index: number) => (
+                          <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200">
+                            {name}
+                          </span>
+                        ))}
                   </div>
                 </div>
               )}
@@ -1289,6 +1372,7 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                     ))}
                   </div>
             <div className="flex gap-2">
+              <div className="relative w-full">
               <Input
                       value={newTagInput}
                       onChange={(e) => setNewTagInput(e.target.value)}
@@ -1299,7 +1383,24 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                           addTag(newTagInput)
                         }
                       }}
-                    />
+                  onFocus={() => setShowTagSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowTagSuggestions(false), 150)}
+                />
+                {showTagSuggestions && filteredTagSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-background border border-border rounded-md shadow-lg max-h-60 overflow-y-auto">
+                    {filteredTagSuggestions.map((s) => (
+                      <button
+                        key={s}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { addTag(s); setShowTagSuggestions(false) }}
+                        className="w-full px-3 py-2 text-left hover-accent text-sm capitalize"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
                     <Button
                       type="button"
                       variant="outline"
