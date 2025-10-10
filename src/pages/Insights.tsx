@@ -1,53 +1,10 @@
-import { TrendingUp, Calendar, MapPin, Utensils, Target, Award } from "lucide-react";
+import { TrendingUp, Utensils, Target, Award } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BottomNavigation } from "@/components/BottomNavigation";
 import { TimeRangePicker, useTimeRangeController } from "@/components/TimeRangePicker";
 import type { TimeRangeType } from "@/hooks/useTimeRange";
-import { useKpis, useTopTags, useTrends } from "@/hooks/useInsights";
-
-// Mock insights data
-const insights = {
-  thisMonth: {
-    totalDinners: 23,
-    atHome: 15,
-    restaurant: 8,
-    diversityScore: 0.78,
-    healthScore: 72,
-    streak: 5
-  },
-  lastMonth: {
-    totalDinners: 28,
-    atHome: 18,
-    restaurant: 10,
-    diversityScore: 0.65,
-    healthScore: 68,
-    streak: 8
-  },
-  topCuisines: [
-    { name: "Italian", count: 8, percentage: 35 },
-    { name: "Japanese", count: 6, percentage: 26 },
-    { name: "Thai", count: 4, percentage: 17 },
-    { name: "Mexican", count: 3, percentage: 13 },
-    { name: "Indian", count: 2, percentage: 9 }
-  ],
-  topIngredients: [
-    { name: "Chicken", count: 12, percentage: 52 },
-    { name: "Rice", count: 9, percentage: 39 },
-    { name: "Salmon", count: 7, percentage: 30 },
-    { name: "Pasta", count: 6, percentage: 26 },
-    { name: "Vegetables", count: 15, percentage: 65 }
-  ],
-  weeklyTrend: [
-    { week: "Week 1", dinners: 6, home: 4, out: 2 },
-    { week: "Week 2", dinners: 7, home: 3, out: 4 },
-    { week: "Week 3", dinners: 5, home: 4, out: 1 },
-    { week: "Week 4", dinners: 5, home: 4, out: 1 }
-  ]
-};
+import { useKpis, useTopTags, useTrends, useTopCuisines } from "@/hooks/useInsights";
 
 const StatCard = ({ title, value, subtitle, icon: Icon, trend }: {
   title: string;
@@ -77,10 +34,11 @@ const StatCard = ({ title, value, subtitle, icon: Icon, trend }: {
 );
 
 const Insights = () => {
-  const { range, setType } = useTimeRangeController("month");
+  const { range, setType } = useTimeRangeController("week");
   const { data: kpis } = useKpis(range.start, range.end);
   const { data: topTags } = useTopTags(range.start, range.end, 10);
   const { data: trends } = useTrends(range.start, range.end, 'day');
+  const { data: topCuisines } = useTopCuisines(range.start, range.end, 10);
   return (
     <div className="min-h-screen bg-gradient-background pb-24">
       {/* Header */}
@@ -98,88 +56,78 @@ const Insights = () => {
         
         {/* Main Content */}
         <div className="space-y-6">
-            {/* Key Stats Grid (live when RPC exists, else fallback to mock) */}
+            {/* Key Stats Grid - Cleaned up */}
             <div className="grid grid-cols-2 gap-4">
               <StatCard
-                title="Total Dinners"
-                value={kpis?.total_meals ?? insights.thisMonth.totalDinners}
-                subtitle={`${kpis?.unique_dishes ?? 0} unique dishes`}
+                title="Total Dishes"
+                value={kpis?.total_meals ?? 0}
+                subtitle="consumption records"
                 icon={Utensils}
                 trend="neutral"
               />
               <StatCard
-                title="Total Dishes"
+                title="Unique Dishes"
                 value={kpis?.unique_dishes ?? 0}
-                subtitle={`${Math.round((kpis?.new_ratio ?? 0) * 100)}% new`}
+                subtitle="different dishes tried"
                 icon={Award}
                 trend="up"
               />
               <StatCard
                 title="New Ratio"
                 value={`${Math.round((kpis?.new_ratio ?? 0) * 100)}%`}
-                subtitle="New vs repeat dishes"
+                subtitle="new vs repeat dishes"
                 icon={Target}
                 trend="up"
               />
               <StatCard
                 title="Health Score"
                 value={kpis?.avg_health ? Math.round(kpis.avg_health) : 'N/A'}
-                subtitle={kpis?.avg_effort ? `Avg: ${kpis.avg_effort}` : 'No data'}
+                subtitle="average health rating"
                 icon={TrendingUp}
                 trend="up"
               />
             </div>
 
-            {/* Home vs Restaurant */}
+            {/* Top Cuisines - Real Data */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  Dining Locations
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm">At Home</span>
-                  <Badge variant="secondary">{insights.thisMonth.atHome} meals</Badge>
-                </div>
-                <Progress value={(insights.thisMonth.atHome / insights.thisMonth.totalDinners) * 100} className="h-2" />
-                
-                <div className="flex justify-between items-center">
-                  <span className="text-sm">Restaurants</span>
-                  <Badge variant="outline">{insights.thisMonth.restaurant} meals</Badge>
-                </div>
-                <Progress value={(insights.thisMonth.restaurant / insights.thisMonth.totalDinners) * 100} className="h-2" />
-              </CardContent>
-            </Card>
-
-            {/* Top Cuisines */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Top Cuisines</CardTitle>
+                <CardTitle>Popular Cuisines</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {insights.topCuisines.map((cuisine, index) => (
-                  <div key={cuisine.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="w-6 h-6 rounded-full p-0 flex items-center justify-center">
-                        {index + 1}
-                      </Badge>
-                      <span className="text-sm font-medium">{cuisine.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-16 bg-muted rounded-full h-2 overflow-hidden">
-                        <div 
-                          className="h-full bg-primary transition-all"
-                          style={{ width: `${cuisine.percentage}%` }}
-                        />
+                {topCuisines && topCuisines.length > 0 ? (
+                  topCuisines.map((cuisine, index) => {
+                    const maxFreq = Math.max(...topCuisines.map(c => c.freq));
+                    const percentage = maxFreq > 0 ? (cuisine.freq / maxFreq) * 100 : 0;
+                    
+                    return (
+                      <div key={cuisine.cuisine} className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="w-6 h-6 rounded-full p-0 flex items-center justify-center">
+                            {index + 1}
+                          </Badge>
+                          <span className="text-sm font-medium capitalize">{cuisine.cuisine}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 bg-muted rounded-full h-2 overflow-hidden">
+                            <div 
+                              className="h-full bg-primary transition-all"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <Badge variant="secondary" className="text-xs">
+                            {cuisine.freq}
+                          </Badge>
+                        </div>
                       </div>
-                      <Badge variant="secondary" className="text-xs">
-                        {cuisine.count}
-                      </Badge>
-                    </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Utensils className="h-8 w-8 mx-auto mb-2" />
+                    <p>No cuisine data available</p>
+                    <p className="text-xs mt-1">Add cuisine tags to your dishes to see analytics</p>
                   </div>
-                ))}
+                )}
               </CardContent>
             </Card>
 
@@ -275,15 +223,6 @@ const Insights = () => {
               </CardContent>
             </Card>
 
-            {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-4">
-              <Button variant="outline" className="w-full">
-                View Detailed Report
-              </Button>
-              <Button variant="secondary" className="w-full">
-                Export Data
-              </Button>
-            </div>
         </div>
       </div>
       
