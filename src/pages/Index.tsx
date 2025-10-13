@@ -64,6 +64,9 @@ const Index = () => {
   const [repeatMealData, setRepeatMealData] = useState<any>(null);
   const [initialTitle, setInitialTitle] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [page, setPage] = useState<number>(1);
+  const pageSize = 20;
 
   // Listen for custom event to show MealTypeSelector
   useEffect(() => {
@@ -87,6 +90,11 @@ const Index = () => {
       repeatMealData: !!repeatMealData
     });
   }, [showMealTypeSelector, showAddDinner, editDinner, repeatMealData]);
+
+  // Reset pagination when filters/search change
+  useEffect(() => {
+    setPage(1);
+  }, [activeFilter, searchQuery]);
 
   const handleDishClick = (dish: any) => {
     setSelectedDish(dish);
@@ -192,28 +200,34 @@ const Index = () => {
     queryClient.refetchQueries({ queryKey: ['locations', user?.id] });
   };
 
-  // Fetch dishes from Supabase
-  const { data: dishes = [], isLoading } = useQuery({
-    queryKey: ['dishes', user?.id],
+  // Fetch dishes page from Supabase
+  const { data: dishPage, isLoading } = useQuery({
+    queryKey: ['dishes', user?.id, page, pageSize],
     queryFn: async () => {
       if (!user) {
         console.log('No user found');
-        return [];
+        return { items: [], total: 0 } as { items: any[]; total: number };
       }
       
       console.log('Fetching dishes for user:', user.id);
       
-      // Load dishes with their instances and base tags
+      // Count total for pagination
+      const { count: totalCount } = await supabase
+        .from('dishes')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+
+      // Load dishes with their instances and base tags (current page)
       const { data, error } = await supabase
         .from('dishes')
         .select(`
           id, title, health_score, base_photo_url, effort, meal_type, notes, created_at, updated_at,
-          dinner_instances(id, datetime, location, variant_title, notes, photo_url, place_id, count, last_consumed, consumption_records(id, consumed_at)),
+          dinner_instances(id, datetime, location, variant_title, notes, photo_url, place_id, count, last_consumed, consumption_records(id, consumed_at, location)),
           tags(name, type, is_base_tag)
         `)
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
-        .limit(20);
+        .range((page - 1) * pageSize, page * pageSize - 1);
       
       if (error) {
         console.error('Supabase query error:', error);
@@ -289,48 +303,79 @@ const Index = () => {
       
       console.log('Transformed dishes data:', transformedData);
       
-      return transformedData;
+      return { items: transformedData, total: totalCount ?? 0 } as { items: any[]; total: number };
     },
     enabled: !!user
   });
 
-  // Filter dishes based on search query
+  const dishes = dishPage?.items ?? [];
+  const totalDishesCount = dishPage?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalDishesCount / pageSize));
+
+  // Filter dishes based on search query and active filter
   const filteredDishes = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return dishes;
+    let filtered = dishes;
+
+    // Apply quick filter first
+    if (activeFilter !== 'all') {
+      filtered = dishes.filter(dish => {
+        switch (activeFilter) {
+          case 'at-home':
+            // Check if any instance has at-home consumption records
+            return dish.dinner_instances?.some(instance => {
+              return instance.consumption_records?.some((record: any) => {
+                const location = record.location || instance.location;
+                return !location || location.trim() === '' || location.toLowerCase().includes('home');
+              });
+            });
+          case 'breakfast':
+            return dish.meal_type === 'breakfast';
+          case 'lunch':
+            return dish.meal_type === 'lunch';
+          case 'dinner':
+            return dish.meal_type === 'dinner';
+          default:
+            return true;
+        }
+      });
     }
 
-    const query = searchQuery.toLowerCase().trim();
-    
-    return dishes.filter(dish => {
-      // Search in dish title
-      if (dish.title.toLowerCase().includes(query)) {
-        return true;
-      }
-
-      // Search in dish-level tags
-      if (dish.base_tags?.some(tag => tag.name.toLowerCase().includes(query))) {
-        return true;
-      }
-
-      // Search in variant titles
-      if (dish.dinner_instances?.some(instance => {
-        // Search in variant title
-        if (instance.variant_title?.toLowerCase().includes(query)) {
+    // Then apply search query filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      
+      filtered = filtered.filter(dish => {
+        // Search in dish title
+        if (dish.title.toLowerCase().includes(query)) {
           return true;
         }
-        // Search in variant tags
-        if (instance.tags && instance.tags.some((t: any) => (t.name || '').toLowerCase().includes(query))) {
+
+        // Search in dish-level tags
+        if (dish.base_tags?.some(tag => tag.name.toLowerCase().includes(query))) {
           return true;
         }
+
+        // Search in variant titles and variant tags
+        if (dish.dinner_instances?.some(instance => {
+          // Search in variant title
+          if (instance.variant_title?.toLowerCase().includes(query)) {
+            return true;
+          }
+          // Search in variant tags
+          if (instance.tags && instance.tags.some((t: any) => (t.name || '').toLowerCase().includes(query))) {
+            return true;
+          }
+          return false;
+        })) {
+          return true;
+        }
+
         return false;
-      })) {
-        return true;
-      }
+      });
+    }
 
-      return false;
-    });
-  }, [dishes, searchQuery]);
+    return filtered;
+  }, [dishes, searchQuery, activeFilter]);
 
   // Fetch stats
   const { data: stats } = useQuery({
@@ -504,12 +549,41 @@ const Index = () => {
       <section className="px-4 mb-6">
         <div className="container mx-auto">
           <div className="flex gap-2 overflow-x-auto pb-2">
-            <Button variant="filter" size="sm">All</Button>
-            <Button variant="filter" size="sm">At Home</Button>
-            <Button variant="filter" size="sm">Restaurant</Button>
-            <Button variant="filter" size="sm">Past Week</Button>
-            <Button variant="filter" size="sm">Vegetarian</Button>
-            <Button variant="filter" size="sm">Italian</Button>
+            <Button 
+              variant={activeFilter === 'all' ? 'default' : 'filter'} 
+              size="sm"
+              onClick={() => setActiveFilter('all')}
+            >
+              All
+            </Button>
+            <Button 
+              variant={activeFilter === 'at-home' ? 'default' : 'filter'} 
+              size="sm"
+              onClick={() => setActiveFilter('at-home')}
+            >
+              At Home
+            </Button>
+            <Button 
+              variant={activeFilter === 'breakfast' ? 'default' : 'filter'} 
+              size="sm"
+              onClick={() => setActiveFilter('breakfast')}
+            >
+              Breakfast
+            </Button>
+            <Button 
+              variant={activeFilter === 'lunch' ? 'default' : 'filter'} 
+              size="sm"
+              onClick={() => setActiveFilter('lunch')}
+            >
+              Lunch
+            </Button>
+            <Button 
+              variant={activeFilter === 'dinner' ? 'default' : 'filter'} 
+              size="sm"
+              onClick={() => setActiveFilter('dinner')}
+            >
+              Dinner
+            </Button>
           </div>
           
           {/* Search Bar */}
@@ -576,6 +650,19 @@ const Index = () => {
                   onClick={() => handleDishClick(dish)}
                 />
               ))}
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+                Next
+              </Button>
             </div>
           )}
         </div>
