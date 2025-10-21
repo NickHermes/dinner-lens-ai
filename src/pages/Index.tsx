@@ -200,24 +200,18 @@ const Index = () => {
     queryClient.refetchQueries({ queryKey: ['locations', user?.id] });
   };
 
-  // Fetch dishes page from Supabase
-  const { data: dishPage, isLoading } = useQuery({
-    queryKey: ['dishes', user?.id, page, pageSize],
+  // Fetch ALL dishes for search/filter, then paginate
+  const { data: allDishes = [], isLoading } = useQuery({
+    queryKey: ['dishes', user?.id],
     queryFn: async () => {
       if (!user) {
         console.log('No user found');
-        return { items: [], total: 0 } as { items: any[]; total: number };
+        return [];
       }
       
       console.log('Fetching dishes for user:', user.id);
       
-      // Count total for pagination
-      const { count: totalCount } = await supabase
-        .from('dishes')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id);
-
-      // Load dishes with their instances and base tags (current page)
+      // Load ALL dishes with their instances and base tags
       const { data, error } = await supabase
         .from('dishes')
         .select(`
@@ -226,8 +220,7 @@ const Index = () => {
           tags(name, type, is_base_tag)
         `)
         .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
-        .range((page - 1) * pageSize, page * pageSize - 1);
+        .order('updated_at', { ascending: false });
       
       if (error) {
         console.error('Supabase query error:', error);
@@ -303,22 +296,18 @@ const Index = () => {
       
       console.log('Transformed dishes data:', transformedData);
       
-      return { items: transformedData, total: totalCount ?? 0 } as { items: any[]; total: number };
+      return transformedData;
     },
     enabled: !!user
   });
 
-  const dishes = dishPage?.items ?? [];
-  const totalDishesCount = dishPage?.total ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalDishesCount / pageSize));
-
   // Filter dishes based on search query and active filter
   const filteredDishes = useMemo(() => {
-    let filtered = dishes;
+    let filtered = allDishes;
 
     // Apply quick filter first
     if (activeFilter !== 'all') {
-      filtered = dishes.filter(dish => {
+      filtered = allDishes.filter(dish => {
         switch (activeFilter) {
           case 'at-home':
             // Check if any instance has at-home consumption records
@@ -375,7 +364,16 @@ const Index = () => {
     }
 
     return filtered;
-  }, [dishes, searchQuery, activeFilter]);
+  }, [allDishes, searchQuery, activeFilter]);
+
+  // Paginate the filtered results
+  const paginatedDishes = useMemo(() => {
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    return filteredDishes.slice(startIndex, endIndex);
+  }, [filteredDishes, page, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredDishes.length / pageSize));
 
   // Fetch stats
   const { data: stats } = useQuery({
@@ -621,7 +619,7 @@ const Index = () => {
             <div className="text-center py-8">
               <div className="text-muted-foreground">Loading dishes...</div>
             </div>
-          ) : dishes.length === 0 ? (
+          ) : allDishes.length === 0 ? (
             <div className="text-center py-12">
               <Camera className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
               <h3 className="text-lg font-semibold mb-2">No dishes yet</h3>
@@ -643,7 +641,7 @@ const Index = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredDishes.map((dish) => (
+              {paginatedDishes.map((dish) => (
                 <DishCard 
                   key={dish.id} 
                   dish={dish} 
