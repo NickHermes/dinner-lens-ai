@@ -580,6 +580,15 @@ export const DishDetail: React.FC<DishDetailProps> = ({
             .eq('user_id', user.id)
 
           if (instanceError) throw instanceError
+          
+          // Also update the dish's updated_at to make it appear on top in gallery
+          const { error: dishUpdateError } = await supabase
+            .from('dishes')
+            .update({ updated_at: new Date().toISOString() })
+            .eq('id', dish.id)
+            .eq('user_id', user.id)
+          
+          if (dishUpdateError) throw dishUpdateError
         }
       }
 

@@ -732,6 +732,16 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
             .single()
 
           if (updateError) throw updateError
+          
+          // Also update the dish's updated_at to make it appear on top in gallery
+          const { error: dishUpdateError } = await supabase
+            .from('dishes')
+            .update({ updated_at: new Date().toISOString() })
+            .eq('id', repeatMealData.dish.id)
+            .eq('user_id', user.id)
+          
+          if (dishUpdateError) throw dishUpdateError
+          
           instanceData = updatedInstance
         } else {
           // Create New Variant: Insert new instance

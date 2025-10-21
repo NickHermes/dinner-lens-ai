@@ -1,4 +1,4 @@
--- Cuisine Analytics with Comprehensive Country/Cuisine Matching
+-- Fixed Cuisine Analytics with Comprehensive Country/Cuisine Matching
 -- This creates a function to match user tags against known cuisines and countries
 
 -- Create a comprehensive cuisine/country lookup table
