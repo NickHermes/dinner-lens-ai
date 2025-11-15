@@ -70,15 +70,8 @@ export const DishCard: React.FC<DishCardProps> = ({ dish, onClick }) => {
           
           {/* Consumption count badge */}
           {totalConsumptionLogs > 1 && (
-            <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-full">
+            <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-xs px-2 py-1 rounded-full font-medium">
               {totalConsumptionLogs} times
-            </div>
-          )}
-          
-          {/* Health score indicator */}
-          {dish.health_score && (
-            <div className="absolute top-2 left-2 bg-white/90 backdrop-blur-sm text-xs px-2 py-1 rounded-full font-medium">
-              {dish.health_score}% healthy
             </div>
           )}
         </div>

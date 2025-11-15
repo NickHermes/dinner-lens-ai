@@ -941,14 +941,14 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
       }
       onOpenChange(open)
     }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-          <Camera className="h-5 w-5" />
-              <DialogTitle>
+          <div className="flex items-center justify-between gap-4 pr-10">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+          <Camera className="h-5 w-5 flex-shrink-0" />
+              <DialogTitle className="truncate">
                 {editDinner?.isDishEdit 
-                  ? `Edit Dish: ${editDinner.title}`
+                  ? 'Edit Dish'
                   : editDinner?.isVariantEdit
                     ? `Edit Variant: ${editDinner.title}`
                     : repeatMealData?.action_type === 'log_again' 
@@ -1036,34 +1036,43 @@ export const AddDinner: React.FC<AddDinnerProps> = ({
                   </div>
                 </div>
               ) : previewUrl ? (
-                <div className="relative">
+                <div className="relative group">
                   <img 
                     src={previewUrl} 
                     alt="Preview" 
                     className="w-full h-48 object-cover rounded-lg"
                   />
+                  {/* Dark overlay on hover */}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 rounded-lg pointer-events-none"></div>
                   {(repeatMealData?.action_type === 'new_variant' || (!repeatMealData && !editDinner?.isDishEdit) || 
                     (editDinner?.isDishEdit && (!editDinner?.variantPhotos || editDinner.variantPhotos.length <= 1))) && !isAnalyzing && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="absolute top-2 right-2"
-                      onClick={() => {
-                        setSelectedFile(null)
-                        setPreviewUrl(null)
-                        setAiAnalysisCompleted(false)
-                        setIsProcessingPhoto(false)
-                        // Clear file input to allow selecting same file again
-                        if (fileInputRef.current) {
-                          fileInputRef.current.value = ''
-                        }
-                        // Keep hasUploadedPhoto true to show the form with placeholder
-                        // Only reset if it's a repeat meal (where we don't want to show form)
-                        if (repeatMealData) setHasUploadedPhoto(false)
-                      }}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="bg-black/70 hover:bg-black/80 border border-white/20 text-white h-8 px-3 text-sm font-medium rounded-md flex items-center gap-1.5"
+                        onClick={() => {
+                          setSelectedFile(null)
+                          setPreviewUrl(null)
+                          setAiAnalysisCompleted(false)
+                          setIsProcessingPhoto(false)
+                          // Clear file input to allow selecting same file again
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = ''
+                          }
+                          // Keep hasUploadedPhoto true to show the form with placeholder
+                          // Only reset if it's a repeat meal (where we don't want to show form)
+                          if (repeatMealData) setHasUploadedPhoto(false)
+                          // Trigger file input to allow selecting new image immediately
+                          setTimeout(() => {
+                            fileInputRef.current?.click()
+                          }, 0)
+                        }}
+                      >
+                        <Camera className="h-4 w-4" />
+                        Change photo
+                      </Button>
+                    </div>
                   )}
                 </div>
               ) : isProcessingPhoto ? (

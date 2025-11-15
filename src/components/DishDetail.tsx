@@ -666,16 +666,13 @@ export const DishDetail: React.FC<DishDetailProps> = ({
   return (
     <>
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
+          <DialogTitle className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
               <span className="truncate text-ellipsis">{dish.title}</span>
-              <Badge variant="outline" className="ml-1 flex-shrink-0">
-                {instances.reduce((sum, instance) => sum + (instance.consumption_records?.length || 1), 0)} {instances.reduce((sum, instance) => sum + (instance.consumption_records?.length || 1), 0) === 1 ? 'time' : 'times'}
-              </Badge>
             </div>
-            <div className="flex gap-2 mr-24 sm:mr-0 flex-shrink-0">
+            <div className="flex gap-2 flex-shrink-0 pr-12">
               <Button
                 size="sm"
                 variant="outline"
@@ -719,14 +716,32 @@ export const DishDetail: React.FC<DishDetailProps> = ({
             <div className="rounded-lg p-4">
               <div className="flex items-start gap-4">
                 {dish.base_photo_url && (
-                  <img 
-                    src={dish.base_photo_url} 
-                    alt={dish.title}
-                    className="w-24 h-24 rounded-lg object-cover"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'placeholder.svg'
-                    }}
-                  />
+                  <div className="relative flex-shrink-0">
+                    <img 
+                      src={dish.base_photo_url} 
+                      alt={dish.title}
+                      className="w-24 h-24 rounded-lg object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'placeholder.svg'
+                      }}
+                    />
+                    {/* Consumption count badge - orange circle like variant counters */}
+                    {instances.reduce((sum, instance) => sum + (instance.consumption_records?.length || 1), 0) > 1 && (
+                      <div className="absolute top-0 right-0 translate-x-1/3 -translate-y-1/3 select-none">
+                        {/* White ring */}
+                        <div className="relative">
+                          <div className="h-8 w-8 rounded-full bg-white shadow-lg ring-0.5 ring-black/5 flex items-center justify-center">
+                            {/* Inner orange disc */}
+                            <div className="h-6 w-6 rounded-full bg-orange-500 flex items-center justify-center">
+                              <span className="text-white text-sm font-bold leading-none">
+                                {instances.reduce((sum, instance) => sum + (instance.consumption_records?.length || 1), 0)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
                 <div className="flex-1">
                   {/* Avoid duplicate title: header already shows dish title */}
