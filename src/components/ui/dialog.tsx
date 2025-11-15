@@ -57,20 +57,30 @@ const DialogContent = React.forwardRef<
       ref={ref}
       className={cn(
         // Mobile: bottom sheet style to avoid being pushed off-screen by the keyboard
-        "fixed inset-x-0 bottom-0 z-[1000] grid w-full max-w-none gap-4 border bg-background p-6 shadow-lg max-h-[85svh] overflow-x-hidden overscroll-contain rounded-t-xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
-        // Desktop and larger screens: centered dialog
-        "sm:inset-auto sm:left-1/2 sm:top-1/2 sm:translate-x-[-50%] sm:translate-y-[-50%] sm:max-w-lg sm:rounded-lg sm:max-h-[90vh] sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95 sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%] sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%]",
+        "fixed z-[1000] flex flex-col border bg-background shadow-lg overflow-hidden duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+        // Mobile specific positioning
+        "inset-x-0 bottom-0 w-full max-w-none max-h-[85svh] rounded-t-xl",
+        // Desktop and larger screens: centered dialog - completely override mobile positioning
+        "sm:inset-x-0 sm:inset-y-auto sm:left-1/2 sm:top-1/2 sm:right-auto sm:bottom-auto sm:translate-x-[-50%] sm:translate-y-[-50%] sm:w-auto sm:min-w-[500px] sm:max-w-5xl sm:rounded-lg sm:max-h-[90vh] sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95 sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%] sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%]",
         className
       )}
+      style={{
+        // Ensure dialog never exceeds viewport height on desktop
+        // Mobile uses max-h-[85svh] from className, desktop uses max-h-[90vh]
+        ...props.style
+      }}
       {...props}
     >
-      <div className="overflow-y-auto max-h-full pb-[max(env(safe-area-inset-bottom),16px)]">
-        {children}
-      </div>
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+      {/* Close button - fixed position, always visible at top */}
+      <DialogPrimitive.Close className="absolute right-2 top-2 z-30 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none bg-background/95 backdrop-blur-sm p-2 shadow-lg border border-border">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
+      
+      {/* Scrollable content area */}
+      <div className="overflow-y-auto flex-1 p-6 pb-[max(env(safe-area-inset-bottom),16px)]">
+        {children}
+      </div>
     </DialogPrimitive.Content>
   </DialogPortal>
 ))

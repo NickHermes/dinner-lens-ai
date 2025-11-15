@@ -160,20 +160,32 @@ All colors MUST be HSL for consistent theming.
   body {
     @apply text-foreground;
     background: transparent;
-    /* Use svh (small viewport height) to prevent layout shifts when browser UI appears/disappears */
-    min-height: 100svh;
-    height: 100svh;
+    /* Desktop: use normal viewport height */
+    min-height: 100vh;
+    height: 100vh;
     overflow-y: auto;
   }
 
   /* (reverted) scroll lock classes removed */
 
   #root {
-    /* Use svh to prevent layout shifts when browser UI appears/disappears */
-    min-height: 100svh;
-    height: 100svh;
+    /* Desktop: use normal viewport height */
+    min-height: 100vh;
+    height: 100vh;
     background-color: transparent;
     overflow-y: auto;
+  }
+  
+  /* Mobile: override with svh to prevent layout shifts when browser UI appears/disappears */
+  @media (max-width: 768px) {
+    body {
+      min-height: 100svh;
+      height: 100svh;
+    }
+    #root {
+      min-height: 100svh;
+      height: 100svh;
+    }
   }
 }
 
@@ -244,31 +256,50 @@ All colors MUST be HSL for consistent theming.
 :root { color-scheme: light dark; }
 html { 
   background: hsl(var(--background)) !important; 
-  /* Prevent layout shifts on iOS Safari scroll */
-  height: 100%;
   overflow-x: hidden;
-  /* Use small viewport height to prevent shifts when browser toolbar appears/disappears */
-  height: 100svh;
+  /* Desktop: use normal viewport height */
+  height: 100vh;
 }
 body { 
   background: transparent !important; 
-  /* Use small viewport height (svh) to prevent shifts when browser UI appears/disappears */
-  /* svh = smallest possible viewport (browser UI visible), dvh = dynamic (changes on scroll) */
-  min-height: 100svh !important;
-  height: 100svh !important;
-  /* Prevent body from causing fixed element shifts */
+  /* Desktop: use normal viewport height */
+  min-height: 100vh !important;
+  height: 100vh !important;
   position: relative;
   overflow-x: hidden;
-  /* Lock the body height to prevent viewport changes from affecting layout */
   overflow-y: auto;
-  /* Prevent body from expanding when browser toolbar collapses */
-  max-height: 100svh;
 }
 #root, #__next, .app, .viewport, .page { background: transparent !important; }
 
+/* Mobile-only: Use small viewport height (svh) to prevent shifts when browser UI appears/disappears */
+/* This only applies on mobile devices where browser toolbars can appear/disappear */
+@media (max-width: 768px) {
+  html {
+    height: 100svh;
+  }
+  body {
+    min-height: 100svh !important;
+    height: 100svh !important;
+    max-height: 100svh;
+  }
+  #root {
+    min-height: 100svh;
+    height: 100svh;
+  }
+}
+
 /* Replace common 100vh usages coming from utility classes */
-/* Use svh to prevent layout shifts when browser UI appears/disappears on iOS */
-:where(.h-screen, .min-h-screen) { min-height: 100svh !important; height: 100svh !important; }
+/* Desktop: use vh, mobile: use svh */
+:where(.h-screen, .min-h-screen) { 
+  min-height: 100vh !important; 
+  height: 100vh !important; 
+}
+@media (max-width: 768px) {
+  :where(.h-screen, .min-h-screen) { 
+    min-height: 100svh !important; 
+    height: 100svh !important; 
+  }
+}
 
 /* Avoid fixed backgrounds on iOS which cause white seams */
 *[style*="background-attachment: fixed"],
@@ -276,12 +307,9 @@ body {
 
 /* Ensure fixed bottom elements stay at bottom, overriding any conflicting styles */
 /* This fixes issues where browser extensions or injected CSS adds top: 0 !important */
-/* Target all fixed elements that are positioned at bottom */
+/* Target only navigation bars, NOT dialogs - dialogs need their own positioning */
 nav.fixed,
-.fixed.bottom-0,
-[class*="fixed"][class*="bottom-0"],
-[data-radix-dialog-content],
-[data-radix-drawer-content] {
+nav.fixed.bottom-0 {
   top: auto !important;
   bottom: 0 !important;
   position: fixed !important;
