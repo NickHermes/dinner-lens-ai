@@ -55,9 +55,10 @@ export function useTimeRange(initial: TimeRangeType = "month") {
     }
 
     if (type === "week") {
-      // Look at the most recent week with data (fallback to current week)
-      const start = startOfWeek(now);
-      return { start, end, label: "This week" };
+      // Past 7 days (rolling 7 days from today)
+      const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      start.setHours(0, 0, 0, 0);
+      return { start, end, label: "Last Week" };
     }
     if (type === "month") {
       // Look at the most recent month with data (fallback to current month)
@@ -74,8 +75,8 @@ export function useTimeRange(initial: TimeRangeType = "month") {
       return { start, end, label: `${now.getFullYear()}` };
     }
     if (type === "all") {
-      // All time - go back 10 years
-      const start = new Date(now.getFullYear() - 10, 0, 1);
+      // All time - go back 50 years (effectively all time)
+      const start = new Date(now.getFullYear() - 50, 0, 1);
       return { start, end, label: "All Time" };
     }
     const start = startOfMonth(now);

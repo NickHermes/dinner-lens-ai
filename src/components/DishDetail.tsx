@@ -213,10 +213,12 @@ export const DishDetail: React.FC<DishDetailProps> = ({
 
         toast.success('Variant deleted. This was the last variant, so the entire dish has been deleted.')
         onClose?.() // Close the detail view since dish no longer exists
+        onRefresh() // Refresh the gallery to update ordering
       } else {
         console.log('Other instances exist, only deleted this variant')
         toast.success('Variant deleted successfully')
         loadDishDetails(selectedInstanceId) // Reload the dish details while preserving selection
+        onRefresh() // Refresh the gallery to update ordering
       }
     } catch (error: any) {
       console.error('Error deleting instance:', error)
@@ -460,6 +462,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
         } else {
           console.log('Other instances exist, variant deleted but dish remains')
           toast.success('Consumption record deleted. This was the last record for this variant, so the variant has been deleted.')
+          onRefresh() // Refresh the gallery to update ordering
         }
       } else {
         console.log('Other consumption records exist, only deleted this record')
@@ -489,6 +492,7 @@ export const DishDetail: React.FC<DishDetailProps> = ({
         }
         
         toast.success('Consumption record deleted successfully')
+        onRefresh() // Refresh the gallery to update ordering
       }
 
       setConsumptionRecordToDelete(null)

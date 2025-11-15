@@ -281,10 +281,12 @@ AS $$
       cr.id as record_id,
       cr.instance_id,
       cr.consumed_at,
-      di.dish_id
+      di.dish_id,
+      di.user_id
     from consumption_records cr
     join dinner_instances di on di.id = cr.instance_id
     where cr.user_id = auth.uid()
+      and di.user_id = auth.uid()
       and cr.consumed_at >= p_start
       and cr.consumed_at < p_end
   ),
@@ -293,7 +295,9 @@ AS $$
       t.instance_id,
       min(match_cuisine(t.name)) as cuisine
     from tags t
+    join dinner_instances di on di.id = t.instance_id
     where t.approved = true
+      and di.user_id = auth.uid()
       and match_cuisine(t.name) is not null
     group by t.instance_id
   ),
@@ -302,8 +306,10 @@ AS $$
       t.dish_id,
       min(match_cuisine(t.name)) as cuisine
     from tags t
+    join dishes d on d.id = t.dish_id
     where t.is_base_tag = true
       and t.approved = true
+      and d.user_id = auth.uid()
       and match_cuisine(t.name) is not null
     group by t.dish_id
   ),
@@ -381,10 +387,11 @@ LANGUAGE sql
 SECURITY DEFINER
 AS $$
   with records as (
-    select cr.id as record_id, cr.instance_id, di.dish_id
+    select cr.id as record_id, cr.instance_id, di.dish_id, di.user_id
     from consumption_records cr
     join dinner_instances di on di.id = cr.instance_id
     where cr.user_id = auth.uid()
+      and di.user_id = auth.uid()
       and cr.consumed_at >= p_start
       and cr.consumed_at < p_end
   ),
@@ -392,7 +399,9 @@ AS $$
     select r.record_id, t.name as tag
     from records r
     join tags t on t.instance_id = r.instance_id
+    join dinner_instances di on di.id = t.instance_id
     where t.approved = true
+      and di.user_id = auth.uid()
       and t.type != 'cuisine'
       and match_cuisine(t.name) is null
   ),
@@ -400,8 +409,10 @@ AS $$
     select r.record_id, t.name as tag
     from records r
     join tags t on t.dish_id = r.dish_id
+    join dishes d on d.id = t.dish_id
     where t.is_base_tag = true
       and t.approved = true
+      and d.user_id = auth.uid()
       and t.type != 'cuisine'
       and match_cuisine(t.name) is null
   ),
