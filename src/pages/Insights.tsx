@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { BottomNavigation } from "@/components/BottomNavigation";
 import { TimeRangePicker, useTimeRangeController } from "@/components/TimeRangePicker";
 import type { TimeRangeType } from "@/hooks/useTimeRange";
-import { useKpis, useTopTags, useTrends, useTopCuisines } from "@/hooks/useInsights";
+import { useKpis, useTopTags, useTopCuisines, useHealthiestDishes } from "@/hooks/useInsights";
 
 const StatCard = ({ title, value, subtitle, icon: Icon, trend }: {
   title: string;
@@ -37,10 +37,10 @@ const Insights = () => {
   const { range, setType } = useTimeRangeController("week");
   const { data: kpis } = useKpis(range.start, range.end);
   const { data: topTags } = useTopTags(range.start, range.end, 10);
-  const { data: trends } = useTrends(range.start, range.end, 'day');
   const { data: topCuisines } = useTopCuisines(range.start, range.end, 10);
+  const { data: healthiestDishes } = useHealthiestDishes(range.start, range.end);
   return (
-    <div className="min-h-screen bg-gradient-background pb-24">
+    <div className="min-h-screen bg-gradient-background">
       {/* Header */}
       <header className="bg-card/80 backdrop-blur-sm border-b border-border sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
@@ -55,7 +55,7 @@ const Insights = () => {
         <TimeRangePicker value={range.type} onChange={(v: TimeRangeType) => setType(v)} />
         
         {/* Main Content */}
-        <div className="space-y-6">
+        <div className="space-y-6 pb-[100px]">
             {/* Key Stats Grid - Cleaned up */}
             <div className="grid grid-cols-2 gap-4">
               <StatCard
@@ -144,51 +144,91 @@ const Insights = () => {
               </Card>
             </div>
 
-            {/* Health & Effort Trends - Real Data */}
-            <Card>
+            {/* Health Overview */}
+            <Card className="mb-8">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5" />
-                  Health & Effort Trends
+                  Health Overview
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {trends && trends.length > 0 ? (
-                  trends.slice(0, 7).map((trend) => (
-                    <div key={trend.bucket_date} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-medium">
-                          {new Date(trend.bucket_date).toLocaleDateString()}
-                        </span>
-                        <div className="flex gap-2">
-                          <Badge variant="outline" className="text-xs">
-                            Health: {trend.avg_health ? Math.round(trend.avg_health) : 'N/A'}
-                          </Badge>
-                          <Badge variant="secondary" className="text-xs">
-                            {trend.meals} meals
-                          </Badge>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
-                          <div 
-                            className="h-full bg-primary transition-all"
-                            style={{ 
-                              width: `${trend.avg_health ? (trend.avg_health / 100) * 100 : 0}%` 
-                            }}
-                            title={`Health Score: ${trend.avg_health ? Math.round(trend.avg_health) : 'N/A'}`}
-                          />
-                        </div>
-                        <span className="text-xs text-muted-foreground capitalize">
-                          {trend.effort_mode || 'N/A'}
-                        </span>
-                      </div>
+              <CardContent className="space-y-6 pb-8">
+                {/* Average Health */}
+                {kpis?.avg_health !== null && kpis?.avg_health !== undefined ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Average Health</span>
+                      <span className="text-lg font-bold">{Math.round(kpis.avg_health)}%</span>
                     </div>
-                  ))
+                    <div className="flex-1 bg-muted rounded-full h-3 overflow-hidden">
+                      <div 
+                        className="h-full bg-primary transition-all"
+                        style={{ 
+                          width: `${kpis.avg_health}%` 
+                        }}
+                      />
+                    </div>
+                  </div>
                 ) : (
+                  <div className="text-center py-4 text-muted-foreground">
+                    <p>No health data available</p>
+                  </div>
+                )}
+
+                {/* Healthiest Dish */}
+                {healthiestDishes?.healthiest && (
+                  <div className="space-y-2 pt-4 border-t">
+                    <span className="text-sm font-medium text-muted-foreground">Healthiest Dish</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {healthiestDishes.healthiest.base_photo_url && (
+                          <img 
+                            src={healthiestDishes.healthiest.base_photo_url} 
+                            alt={healthiestDishes.healthiest.dish_title}
+                            className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'placeholder.svg'
+                            }}
+                          />
+                        )}
+                        <span className="text-base font-medium capitalize truncate">{healthiestDishes.healthiest.dish_title}</span>
+                      </div>
+                      <Badge variant="outline" className="text-sm flex-shrink-0">
+                        {healthiestDishes.healthiest.health_score}%
+                      </Badge>
+                    </div>
+                  </div>
+                )}
+
+                {/* Unhealthiest Dish */}
+                {healthiestDishes?.unhealthiest && (
+                  <div className="space-y-2 pt-4 border-t">
+                    <span className="text-sm font-medium text-muted-foreground">Unhealthiest Dish</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {healthiestDishes.unhealthiest.base_photo_url && (
+                          <img 
+                            src={healthiestDishes.unhealthiest.base_photo_url} 
+                            alt={healthiestDishes.unhealthiest.dish_title}
+                            className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'placeholder.svg'
+                            }}
+                          />
+                        )}
+                        <span className="text-base font-medium capitalize truncate">{healthiestDishes.unhealthiest.dish_title}</span>
+                      </div>
+                      <Badge variant="outline" className="text-sm flex-shrink-0">
+                        {healthiestDishes.unhealthiest.health_score}%
+                      </Badge>
+                    </div>
+                  </div>
+                )}
+
+                {(!healthiestDishes?.healthiest && !healthiestDishes?.unhealthiest && kpis?.avg_health === null) && (
                   <div className="text-center py-8 text-muted-foreground">
                     <TrendingUp className="h-8 w-8 mx-auto mb-2" />
-                    <p>No trend data available</p>
+                    <p>No health data available</p>
                   </div>
                 )}
               </CardContent>
