@@ -16,7 +16,7 @@ const Inspiration = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-background pb-24">
+    <div className="min-h-screen bg-gradient-background">
       {/* Header */}
       <header className="bg-card/80 backdrop-blur-sm border-b border-border sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
@@ -27,7 +27,7 @@ const Inspiration = () => {
         </div>
       </header>
 
-      <div className="p-4 space-y-6">
+      <div className="p-4 space-y-6 pb-[100px]">
         {/* Dish of the Day */}
         <Card>
           <CardHeader>

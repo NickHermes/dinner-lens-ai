@@ -657,8 +657,8 @@ const Index = () => {
       </section>
 
       {/* Gallery */}
-      <section className="px-4 pb-24">
-        <div className="container mx-auto">
+      <section className="px-4">
+        <div className="container mx-auto pb-[100px]">
           <h3 className="text-xl font-semibold mb-4 text-foreground">Your Dishes</h3>
           {isLoading ? (
             <div className="text-center py-8">

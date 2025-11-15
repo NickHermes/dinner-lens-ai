@@ -75,7 +75,7 @@ const getPlaceTypeColor = (type: string) => {
 
 const Places = () => {
   return (
-    <div className="min-h-screen bg-gradient-background pb-24">
+    <div className="min-h-screen bg-gradient-background">
       {/* Header */}
       <header className="bg-card/80 backdrop-blur-sm border-b border-border sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
@@ -123,7 +123,7 @@ const Places = () => {
       </section>
 
       {/* Places List */}
-      <section className="px-4">
+      <section className="px-4 pb-[100px]">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-foreground">Saved Places</h2>
           <Badge variant="secondary">{mockPlaces.length} places</Badge>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface Kpis {
   total_meals: number;
@@ -227,6 +228,112 @@ export function useTopCuisines(start: Date, end: Date, limit: number = 10) {
       isMounted = false;
     };
   }, [start.getTime(), end.getTime(), limit]);
+
+  return { data, loading, error };
+}
+
+export interface HealthiestDish {
+  dish_id: string;
+  dish_title: string;
+  health_score: number;
+  base_photo_url?: string | null;
+}
+
+export function useHealthiestDishes(start: Date, end: Date) {
+  const { user } = useAuth();
+  const [data, setData] = useState<{ healthiest: HealthiestDish | null; unhealthiest: HealthiestDish | null } | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setData({ healthiest: null, unhealthiest: null });
+      return;
+    }
+
+    let isMounted = true;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        // Get consumption records within time range
+        const { data: consumptionData, error: consumptionError } = await supabase
+          .from('consumption_records')
+          .select(`
+            instance_id,
+            dinner_instances!inner(
+              dish_id,
+              dishes!inner(
+                id,
+                title,
+                health_score,
+                base_photo_url
+              )
+            )
+          `)
+          .eq('user_id', user.id)
+          .gte('consumed_at', start.toISOString())
+          .lt('consumed_at', end.toISOString());
+
+        if (consumptionError) throw consumptionError;
+
+        // Extract unique dishes with their health scores
+        const dishMap = new Map<string, { title: string; health_score: number | null; base_photo_url?: string | null }>();
+        
+        consumptionData?.forEach((record: any) => {
+          const dish = record.dinner_instances?.dishes;
+          if (dish && dish.id && dish.health_score !== null && dish.health_score !== undefined) {
+            if (!dishMap.has(dish.id)) {
+              dishMap.set(dish.id, {
+                title: dish.title,
+                health_score: dish.health_score,
+                base_photo_url: dish.base_photo_url
+              });
+            }
+          }
+        });
+
+        // Find healthiest and unhealthiest
+        let healthiest: HealthiestDish | null = null;
+        let unhealthiest: HealthiestDish | null = null;
+
+        dishMap.forEach((dish, dishId) => {
+          if (dish.health_score !== null) {
+            if (!healthiest || dish.health_score > healthiest.health_score) {
+              healthiest = {
+                dish_id: dishId,
+                dish_title: dish.title,
+                health_score: dish.health_score,
+                base_photo_url: dish.base_photo_url
+              };
+            }
+            if (!unhealthiest || dish.health_score < unhealthiest.health_score) {
+              unhealthiest = {
+                dish_id: dishId,
+                dish_title: dish.title,
+                health_score: dish.health_score,
+                base_photo_url: dish.base_photo_url
+              };
+            }
+          }
+        });
+
+        if (isMounted) setData({ healthiest, unhealthiest });
+      } catch (e: any) {
+        console.error('❌ Healthiest Dishes Error:', e);
+        if (isMounted) {
+          setData({ healthiest: null, unhealthiest: null });
+          setError(e?.message ?? "Failed to load healthiest dishes");
+        }
+      } finally {
+        isMounted && setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, [start.getTime(), end.getTime(), user?.id]);
 
   return { data, loading, error };
 }
