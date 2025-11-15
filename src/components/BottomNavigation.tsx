@@ -30,7 +30,24 @@ export const BottomNavigation = () => {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-card/90 backdrop-blur-sm border-t border-border z-40 pb-[env(safe-area-inset-bottom)]">
+    <nav 
+      className="fixed bottom-0 left-0 right-0 bg-card/90 backdrop-blur-sm border-t border-border z-40"
+      style={{ 
+        position: 'fixed',
+        bottom: 0,
+        top: 'auto',
+        left: 0,
+        right: 0,
+        // Use max() to ensure padding is always at least the safe area, preventing shifts
+        paddingBottom: 'max(env(safe-area-inset-bottom), 0px)',
+        // Lock to visual viewport - prevents recalculation when browser toolbar appears/disappears
+        transform: 'translateZ(0)',
+        willChange: 'transform',
+        // Ensure it's positioned relative to the visual viewport, not layout viewport
+        // This prevents the gap when Safari's bottom toolbar expands/collapses
+        marginBottom: 0
+      }}
+    >
       <div className="flex justify-around py-4 px-2">
         {navItems.map(({ path, icon: Icon, label }) => {
           const isActive = location.pathname === path;
