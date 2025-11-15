@@ -389,10 +389,10 @@ const Index = () => {
       };
       
       try {
-        // Get total number of consumption records (total instances)
+        // Get total number of consumption records (total meals) - matching analytics logic
         const { data: consumptionData, error: consumptionError } = await supabase
           .from('consumption_records')
-          .select('id')
+          .select('id, instance_id')
           .eq('user_id', user.id)
 
         if (consumptionError) throw consumptionError
@@ -413,38 +413,86 @@ const Index = () => {
         )
         console.log('Unique locations:', uniqueLocations.size)
 
-        // Get total number of unique dishes
-        const { data: dishesData, error: dishesError } = await supabase
-          .from('dishes')
-          .select('id')
+        // Get unique dishes that have consumption records - matching analytics logic
+        // This counts dishes that have been consumed, not all dishes
+        // First get all consumption records with their instance_ids
+        const { data: consumptionWithInstances, error: consumptionInstancesError } = await supabase
+          .from('consumption_records')
+          .select('instance_id')
           .eq('user_id', user.id)
 
-        if (dishesError) throw dishesError
-        console.log('Dishes data:', dishesData?.length)
+        if (consumptionInstancesError) throw consumptionInstancesError
 
-        // Get meal type breakdown for unique dishes (simpler approach)
-        const { data: dishesMealTypes, error: dishesMealError } = await supabase
-          .from('dishes')
-          .select('meal_type')
+        // Get unique instance_ids
+        const instanceIds = [...new Set(consumptionWithInstances?.map(r => r.instance_id).filter(Boolean) || [])]
+        
+        if (instanceIds.length === 0) {
+          console.log('No consumption records found')
+          const result = { 
+            totalDishes: 0, 
+            uniqueDishes: 0,
+            places: uniqueLocations.size, 
+            placesByType: { friends: 0, restaurants: 0, other: 0 },
+            totalDishesByMealType: { breakfast: 0, lunch: 0, dinner: 0, other: 0 },
+            uniqueDishesByMealType: { breakfast: 0, lunch: 0, dinner: 0, other: 0 }
+          }
+          return result
+        }
+
+        // Get dish_ids from those instances
+        const { data: instancesData, error: instancesError } = await supabase
+          .from('dinner_instances')
+          .select('dish_id, dishes!inner(meal_type)')
+          .in('id', instanceIds)
           .eq('user_id', user.id)
 
-        if (dishesMealError) throw dishesMealError
-
-        // Calculate meal type breakdowns for unique dishes
+        if (instancesError) throw instancesError
+        
+        // Extract unique dish_ids and meal types
+        const uniqueDishIds = new Set<string>()
         const dishesByMealType = { breakfast: 0, lunch: 0, dinner: 0, other: 0 }
-        dishesMealTypes?.forEach(dish => {
-          const mealType = dish.meal_type
-          if (mealType && mealType in dishesByMealType) {
-            dishesByMealType[mealType as keyof typeof dishesByMealType]++
+        
+        instancesData?.forEach(instance => {
+          const dishId = instance.dish_id
+          const mealType = (instance.dishes as any)?.meal_type
+          
+          if (dishId) {
+            uniqueDishIds.add(dishId)
+            
+            // Count meal types for dishes with consumption (only count once per dish)
+            if (mealType && mealType in dishesByMealType && !uniqueDishIds.has(dishId)) {
+              // Actually, we need to count each dish once, so let's do this differently
+            }
           }
         })
+        
+        // Count meal types properly (once per unique dish)
+        const dishIdsArray = Array.from(uniqueDishIds)
+        if (dishIdsArray.length > 0) {
+          const { data: dishesData, error: dishesDataError } = await supabase
+            .from('dishes')
+            .select('meal_type')
+            .in('id', dishIdsArray)
+            .eq('user_id', user.id)
+
+          if (!dishesDataError && dishesData) {
+            dishesData.forEach(dish => {
+              const mealType = dish.meal_type
+              if (mealType && mealType in dishesByMealType) {
+                dishesByMealType[mealType as keyof typeof dishesByMealType]++
+              }
+            })
+          }
+        }
+        
+        console.log('Unique dishes (with consumption):', uniqueDishIds.size)
 
         // For now, use the same breakdown for total dishes (we'll fix this later)
         const consumptionByMealType = dishesByMealType
 
         const result = { 
           totalDishes: consumptionData?.length || 0, 
-          uniqueDishes: dishesData?.length || 0,
+          uniqueDishes: uniqueDishIds.size || 0,
           places: uniqueLocations.size, 
           placesByType: { friends: 0, restaurants: 0, other: 0 }, // TODO: Implement place type categorization
           totalDishesByMealType: consumptionByMealType,
@@ -479,9 +527,6 @@ const Index = () => {
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-foreground">DinnerLens</h1>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm">
-                <Search className="h-4 w-4" />
-              </Button>
               <Button variant="ghost" size="sm" onClick={() => signOut()}>
                 <LogOut className="h-4 w-4" />
               </Button>
